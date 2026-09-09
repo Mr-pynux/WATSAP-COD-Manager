@@ -127,3 +127,18 @@ Work Log:
 
 Stage Summary:
 - دخول الأدمين خدام دابا فجميع السياقات (localhost + رابط preview HTTPS + iframe). نفس الكريدينسيالات: admin@shop.ma / admin123.
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: تشخيص خطأ hydration (aria-controls radix mismatch) فصفحة الهبوط
+
+Work Log:
+- المستخدم لصق Console Error: aria-controls="radix-_R_2ad9bmqlb_" (client) ≠ "radix-_R_99kpbmqlb_" (server) على DialogTrigger (جدول المقاسات) + SelectTrigger (city)
+- فحص الكود: page.tsx/landing-client/product-3d-viewer/layout — صفر أنماط خطرة (typeof window/localStorage/Math.random/Date/locale/toLocale — كلشي absent)، لا dynamic ssr:false
+- مقارنة مباشرة SSR HTML (curl) vs client DOM (agent-browser eval): الجوج IDs متطابقين بالضبط (radix-_R_99kpbmqlb_ / radix-_R_16u4pbmqlb_) — والـ ID اللي عند المستخدم فالجانب السيرفر (99kpbmqlb) هو نفسه اللي كيصدر السيرفر الحالي
+- المتصفح النظيف: تحميل جديد = صفر أخطاء/تحذيرات فالكونسول؛ HMR (touch + recompile) = صفر أخطاء
+- الخلاصة: الكود سليم hydration-wise؛ الخطأ عند المستخدم جا من (أ) تاب قديم من قبل إعادة تصميم الواجهة/ريستارت السيرفر — كيعيد الـ hydration بـ JS جديد ضد HTML قديم، أو (ب) إضافة متصفح/auto-translate كتعدل الـ DOM قبل React — الحالتين مذكورين فرسالة الخطأ نفسها
+- Warning غير مؤثر وظيفيا (React كيبقي قيم الكليان — الديالوغات والسيليكت خدامين)
+
+Stage Summary:
+- ما كاينش bug حقيقي فالكود. الحل عند المستخدم: refresh قوي (Ctrl+Shift+R) أو سد التابات القديمة وحل رابط جديد. لو بقا: عطل auto-translate أو جرب incognito.
