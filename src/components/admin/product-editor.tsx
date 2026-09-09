@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { normalizeMediaUrl, youtubeId } from "@/lib/url";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -183,12 +184,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   /* ── media helpers ─────────────────────────────── */
 
   function addImageUrl(raw: string) {
-    const url = raw.trim();
-    if (!url) return;
-    try {
-      new URL(url);
-    } catch {
-      toast.error("الرابط ماشي صحيح — خصو يبدا بـ https://");
+    const url = normalizeMediaUrl(raw);
+    if (!url) {
+      toast.error(
+        "الرابط ماشي صحيح — كوبي الرابط كامل (مثال: www.example.com/photo.jpg ولا https://...)"
+      );
       return;
     }
     if (draft?.imageUrls.includes(url)) {
@@ -197,6 +197,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     }
     set({ imageUrls: [...(draft?.imageUrls ?? []), url] });
     setUrlInput("");
+    toast.success("تزادت الصورة ✓");
   }
 
   function moveImage(i: number, dir: 1 | -1) {
@@ -556,14 +557,21 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             <div className="space-y-2 border-t pt-4">
               <Label className="flex items-center gap-2">
                 <Play className="h-4 w-4 text-primary" />
-                فيديو المنتج (رابط MP4 مباشر)
+                فيديو المنتج (رابط MP4 ولا رابط يوتيوب)
               </Label>
               <div className="flex gap-2">
                 <Input
                   dir="ltr"
-                  placeholder="https://example.com/video.mp4"
+                  placeholder="https://youtu.be/... ولا www.youtube.com/watch?v=..."
                   value={draft.videoUrl}
                   onChange={(e) => set({ videoUrl: e.target.value })}
+                  onBlur={() => {
+                    // auto-fix: add https:// + trim on leave — no more "رابط غير صالح"
+                    const norm = normalizeMediaUrl(draft.videoUrl);
+                    if (draft.videoUrl.trim() && norm && norm !== draft.videoUrl) {
+                      set({ videoUrl: norm });
+                    }
+                  }}
                   className="ltr-num"
                 />
                 {draft.videoUrl && (
@@ -579,17 +587,29 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   </Button>
                 )}
               </div>
-              {draft.videoUrl && (
-                <video
-                  src={draft.videoUrl}
-                  controls
-                  muted
-                  playsInline
-                  className="w-full rounded-xl border max-h-56 object-contain bg-black"
-                />
-              )}
+              {draft.videoUrl &&
+                (youtubeId(draft.videoUrl) ? (
+                  <div className="relative w-full rounded-xl border overflow-hidden bg-black" style={{ aspectRatio: "16/9" }}>
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${youtubeId(draft.videoUrl)}`}
+                      title="معاينة الفيديو"
+                      className="absolute inset-0 w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                ) : (
+                  <video
+                    src={draft.videoUrl}
+                    controls
+                    muted
+                    playsInline
+                    className="w-full rounded-xl border max-h-56 object-contain bg-black"
+                  />
+                ))}
               <p className="text-xs text-muted-foreground">
-                الفيديو كيبان فعارض 360° فالصفحة الرئيسية وكيتفحص بالسحب حتى هو
+                الرابط بلا https كيتصلح وحيدو — والفيديو كيبان فعارض 360° فالصفحة الرئيسية
               </p>
             </div>
           </CardContent>

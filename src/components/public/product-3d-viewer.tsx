@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { youtubeEmbed, youtubeId } from "@/lib/url";
 
 interface MediaItem {
   type: "image" | "video";
@@ -89,6 +90,8 @@ export function Product3DViewer({
   }, [auto, index, setView]);
 
   const isVideo = media[index]?.type === "video";
+  const current = media[index];
+  const ytVideoId = isVideo ? youtubeId(current?.src ?? "") : null;
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isVideo) return; // don't hijack the video controls
@@ -125,8 +128,6 @@ export function Product3DViewer({
     if (e.key === "ArrowRight") step(1);
   };
 
-  const current = media[index];
-
   const stageInner = (
     <>
       {/* golden studio glow */}
@@ -151,16 +152,29 @@ export function Product3DViewer({
           }}
         >
           {isVideo ? (
-            <video
-              key={current?.src}
-              src={current?.src}
-              controls
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="absolute inset-0 w-full h-full object-contain drop-shadow-2xl rounded-xl"
-            />
+            ytVideoId ? (
+              <iframe
+                key={current?.src}
+                src={youtubeEmbed(ytVideoId)}
+                title="فيديو المنتج"
+                className="absolute inset-0 w-full h-full rounded-xl"
+                style={{ border: 0 }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            ) : (
+              <video
+                key={current?.src}
+                src={current?.src}
+                controls
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="absolute inset-0 w-full h-full object-contain drop-shadow-2xl rounded-xl"
+              />
+            )
           ) : (
             <>
               {media.map((m, i) =>

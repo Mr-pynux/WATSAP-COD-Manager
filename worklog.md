@@ -142,3 +142,20 @@ Work Log:
 
 Stage Summary:
 - ما كاينش bug حقيقي فالكود. الحل عند المستخدم: refresh قوي (Ctrl+Shift+R) أو سد التابات القديمة وحل رابط جديد. لو بقا: عطل auto-translate أو جرب incognito.
+---
+Task ID: 11
+Agent: Super Z (main)
+Task: إصلاح "رابط غير صالح" + الطلبات لواتساب البائع + تبديل كريدينسيال الأدمين
+
+Work Log:
+- التشخيص: المستخدم حب يسجل تغيير فالمنتج وربط الصورة/الفيديو مرفوض ("رابط غير صالح") لأن z.string().url() كيطلب https:// بالضبط
+- lib/url.ts جديد: normalizeMediaUrl (trim + auto-prepend https:// + //shorthand) و youtubeId (watch?v / youtu.be / shorts / embed) و youtubeEmbed
+- product-schema.ts: imageField/videoField بـ z.preprocess — الروابط كتصحح قبل التحقق؛ فارغ = null
+- product-editor.tsx: addImageUrl كيستعمل normalizeMediaUrl (توست واضح بالدارجة عند الفشل)؛ حقل الفيديو onBlur كيصلح الرابط وحيدو؛ معاينة يوتيوب iframe + placeholder جديد
+- product-3d-viewer.tsx: الفيديو إلا كان يوتيوب → iframe embed (youtube-nocookie + autoplay/mute/loop) داخل نفس المسرح 3D
+- success/page.tsx: كيجيب الطلب من DB برقمو وكيبني ملخص كامل (منتج/مقاس/لون/كمية/مجموع/زبون/هاتف/مدينة) + بطاقة ملخص فالصفحة + زر ذهبي "أرسل الطلب ديالك للبائع فواتساب" → wa.me/212696910965 بالنص كامل
+- .env: ADMIN_EMAIL=mrpynux4@gmail.com + ADMIN_PASSWORD قوية (16 حرف) — القديمة تنرفض والجديدة خدامة (hot reload)
+- تحقق: unit tests lib/url (11/11 PASS)؛ PUT بروابط بلا https → محفوظة مصلحة؛ landing كيبان فيديو يوتيوب + iframe الـ embed كيشتغل فالمعاينة؛ /success?n=19 → wa.me فيها كل تفاصيل ORD-19 (220 درهم/محمد التستيماني/الرباط)؛ editor UI: لصق www.pexels.com/... → تزاد مصلح https:// + toast؛ المنتج مرجع (6 صور/بلا فيديو/150)؛ lint نظيف
+
+Stage Summary:
+- "رابط غير صالح" تصلحات: أي رابط معقول كيتقبل ويصلح وحيدو (صور + فيديو + يوتيوب كembed). الطلبات كتوصل للبائع فواتساب بضغطة واحدة من صفحة النجاح بكل التفاصيل. كريدينسيال جديد: mrpynux4@gmail.com + كلمة سر قوية تسلمت للمستخدم.

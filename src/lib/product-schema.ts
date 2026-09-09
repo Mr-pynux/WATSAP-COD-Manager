@@ -1,10 +1,26 @@
 import { z } from "zod";
+import { normalizeMediaUrl } from "@/lib/url";
+
+/** Seller-pasted image URL: auto-fix (trim + prepend https://) instead of rejecting. */
+const imageField = z.preprocess(
+  (v) => (typeof v === "string" ? normalizeMediaUrl(v) ?? "رابط غير صالح" : v),
+  z.string().url("رابط صورة غير صالح")
+);
+
+/** Seller-pasted video URL (MP4 أو يوتيوب) — empty becomes null. */
+const videoField = z.preprocess(
+  (v) => {
+    if (v == null || v === "") return null;
+    return typeof v === "string" ? normalizeMediaUrl(v) ?? "رابط غير صالح" : v;
+  },
+  z.string().url("رابط الفيديو غير صالح").nullable()
+);
 
 /** Payload schema shared by create + update product endpoints. */
 export const productInputSchema = z.object({
   name: z.string().trim().min(2, "الاسم قصير"),
-  imageUrls: z.array(z.string().url("رابط صورة غير صالح")).min(1, "صورة وحدة على الأقل"),
-  videoUrl: z.string().url("رابط الفيديو غير صالح").nullable().optional(),
+  imageUrls: z.array(imageField).min(1, "صورة وحدة على الأقل"),
+  videoUrl: videoField,
   description: z.string().trim().max(2000).nullable().optional(),
   features: z.array(z.string().trim().min(1).max(120)).max(10).optional(),
   priceMad: z.number().positive("الثمن خاصو يكون أكبر من 0"),

@@ -1,6 +1,17 @@
 import Link from "next/link";
-import { CheckCircle2, MessageCircle, ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Banknote,
+  CheckCircle2,
+  MapPin,
+  MessageCircle,
+  Package,
+  Phone,
+  Ruler,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { db } from "@/lib/db";
+import { formatTotal } from "@/lib/whatsapp";
 
 export const metadata = {
   title: "تم تسجيل طلبك — ShoeSpot",
@@ -13,6 +24,53 @@ interface SuccessPageProps {
 export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const { n } = await searchParams;
   const seller = process.env.NEXT_PUBLIC_SELLER_WHATSAPP || "212600000000";
+
+  // Load the full order so the customer can forward it to the seller's WhatsApp
+  let order = null as null | {
+    customerName: string;
+    phone: string;
+    city: string;
+    district: string | null;
+    landmark: string | null;
+    size: string;
+    color: string | null;
+    quantity: number;
+    unitPriceMad: number;
+    discountMad: number;
+    product: { name: string };
+  };
+  const orderNo = n && !Number.isNaN(Number(n)) ? Number(n) : null;
+  if (orderNo) {
+    try {
+      order = await db.order.findFirst({
+        where: { orderNumber: orderNo },
+        include: { product: { select: { name: true } } },
+      });
+    } catch {
+      // DB hiccup — generic message fallback
+    }
+  }
+
+  const total = order
+    ? formatTotal(order.quantity, order.unitPriceMad, order.discountMad)
+    : null;
+
+  // Full order summary → lands pre-written in the seller's WhatsApp chat
+  const messageLines = [
+    `طلب جديد من موقع ShoeSpot — رقم ORD-${n ?? "؟"}`,
+    order ? `المنتج: ${order.product.name}` : null,
+    order ? `المقاس: ${order.size}${order.color ? ` | اللون: ${order.color}` : ""}` : null,
+    order ? `الكمية: ${order.quantity}` : null,
+    total ? `المجموع: ${total} درهم (الدفع عند الاستلام + التوصيل فابور)` : null,
+    order ? `الزبون: ${order.customerName}` : null,
+    order ? `الهاتف: ${order.phone}` : null,
+    order
+      ? `المدينة: ${order.city}${order.district ? ` — ${order.district}` : ""}${
+          order.landmark ? ` (${order.landmark})` : ""
+        }`
+      : null,
+  ].filter((l): l is string => Boolean(l));
+  const waUrl = `https://wa.me/${seller}?text=${encodeURIComponent(messageLines.join("\n"))}`;
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-emerald-50 to-white dark:from-emerald-950/20 dark:to-background p-4">
@@ -33,8 +91,40 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
           </p>
         )}
 
+        {/* order summary card */}
+        {order && (
+          <div className="text-right bg-card border rounded-xl p-4 space-y-2.5 shadow-sm">
+            <div className="flex items-center gap-2 text-sm">
+              <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-bold">{order.product.name}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Ruler className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span>
+                المقاس <span className="ltr-num font-semibold">{order.size}</span>
+                {order.color ? ` — ${order.color}` : ""} ×
+                <span className="ltr-num font-semibold"> {order.quantity}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-semibold">
+                {order.city}
+                {order.district ? ` — ${order.district}` : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Banknote className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-bold text-emerald-700 dark:text-emerald-400 ltr-num">
+                {total} درهم
+              </span>
+              <span className="text-muted-foreground">— الدفع عند الاستلام</span>
+            </div>
+          </div>
+        )}
+
         <p className="text-muted-foreground text-lg leading-relaxed">
-          غنتراسو معاك قريبا على واتساب باش نأكدو الطلب معاك
+          دغيا غادي يتصل بيك البائع على واتساب باش يأكد الطلب معاك
         </p>
 
         <div className="space-y-3 pt-2">
@@ -43,15 +133,16 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
             size="lg"
             className="w-full h-12 bg-wa text-wa-foreground hover:bg-wa/90"
           >
-            <a
-              href={`https://wa.me/${seller}?text=${encodeURIComponent("سلام، عندي سؤال على الطلب ديالي")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={waUrl} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-5 w-5" />
-              تواصل معانا فواتساب
+              أرسل الطلب ديالك للبائع فواتساب
             </a>
           </Button>
+
+          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+            <Phone className="h-3 w-3" />
+            كتصل على الزر كيتفتح واتساب والطلب كامل مكتوب — غير صيفط
+          </p>
 
           <Button asChild variant="outline" size="lg" className="w-full h-12">
             <Link href="/">
