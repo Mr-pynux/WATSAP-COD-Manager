@@ -8,6 +8,10 @@
   --color-foreground: var(--foreground);
   --font-sans: "Cairo", Tahoma, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* ShoeSpot brand — gold from the logo #f0c000 */
+  --color-brand: #f0c000;
+  --color-brand-strong: #d8a818;
+  --color-brand-soft: #fdf3cd;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -53,31 +57,31 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.596 0.145 163.225);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.845 0.155 92);
+  --primary-foreground: oklch(0.235 0.02 80);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.965 0.03 95);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.596 0.145 163.225);
-  --chart-1: oklch(0.596 0.145 163.225);
+  --ring: oklch(0.845 0.155 92);
+  --chart-1: oklch(0.845 0.155 92);
   --chart-2: oklch(0.769 0.188 70.08);
   --chart-3: oklch(0.556 0.155 286.287);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.596 0.145 163.225);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.845 0.155 92);
+  --sidebar-primary-foreground: oklch(0.235 0.02 80);
+  --sidebar-accent: oklch(0.96 0.02 95);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.596 0.145 163.225);
+  --sidebar-ring: oklch(0.845 0.155 92);
   --wa: oklch(0.584 0.16 149.48);
   --wa-foreground: oklch(0.985 0 0);
 }
@@ -89,31 +93,31 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.696 0.17 162.48);
-  --primary-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.855 0.15 92);
+  --primary-foreground: oklch(0.235 0.02 80);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.28 0.02 95);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.522 0.137 163.227);
-  --chart-1: oklch(0.696 0.17 162.48);
+  --ring: oklch(0.855 0.15 92);
+  --chart-1: oklch(0.855 0.15 92);
   --chart-2: oklch(0.769 0.188 70.08);
   --chart-3: oklch(0.556 0.155 286.287);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.696 0.17 162.48);
-  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.855 0.15 92);
+  --sidebar-primary-foreground: oklch(0.235 0.02 80);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.522 0.137 163.227);
+  --sidebar-ring: oklch(0.855 0.15 92);
   --wa: oklch(0.584 0.16 149.48);
   --wa-foreground: oklch(0.985 0 0);
 }
@@ -150,4 +154,41 @@
   direction: ltr;
   unicode-bidi: embed;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── 3D product viewer helpers ───────────────────── */
+
+/* gentle idle float for the product inside the studio stage */
+@keyframes float3d {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.animate-float3d {
+  animation: float3d 5s ease-in-out infinite;
+}
+
+/* glossy floor reflection under the product (Figma-mockup look) */
+.reflect-mask {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 55%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 55%);
+  transform: scaleY(-1);
+}
+
+/* soft golden glow pulse used behind hero elements */
+@keyframes brandPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.animate-brand-pulse {
+  animation: brandPulse 4s ease-in-out infinite;
 }

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Home,
   ShoppingBag,
+  Package,
   PhoneCall,
   Wallet,
   MoreHorizontal,
@@ -50,6 +51,7 @@ const NAV = [
   { href: "/admin/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/admin/followup", label: "المتابعة", icon: PhoneCall, badge: true },
   { href: "/admin/finance", label: "المالية", icon: Wallet },
+  { href: "/admin/products", label: "المنتجات", icon: Package, more: true },
   { href: "/admin/blacklist", label: "البلاك ليست", icon: Ban, more: true },
   { href: "/admin/couriers", label: "الناقلين", icon: Truck, more: true },
   { href: "/admin/templates", label: "الرسائل", icon: MessageSquareText, more: true },
@@ -60,10 +62,19 @@ const TITLES: Record<string, string> = {
   "/admin/orders": "الطلبات",
   "/admin/followup": "المتابعة",
   "/admin/finance": "المالية",
+  "/admin/products": "المنتجات",
   "/admin/blacklist": "البلاك ليست",
   "/admin/couriers": "الناقلين",
   "/admin/templates": "الرسائل",
 };
+
+function pageTitle(pathname: string): string {
+  if (TITLES[pathname]) return TITLES[pathname];
+  if (pathname.startsWith("/admin/products")) {
+    return pathname.endsWith("/new") ? "منتج جديد" : "تعديل المنتج";
+  }
+  return "لوحة التحكم";
+}
 
 function isActive(pathname: string, href: string, exact?: boolean) {
   return exact ? pathname === href : pathname.startsWith(href);
@@ -92,7 +103,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
-  const title = TITLES[pathname] ?? "لوحة التحكم";
+  const title = pageTitle(pathname);
 
   async function logout() {
     try {

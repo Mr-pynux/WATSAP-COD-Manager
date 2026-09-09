@@ -1,0 +1,720 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useMemo, useState } from "react";
+     4→     4→import Image from "next/image";
+     5→     5→import Link from "next/link";
+     6→     6→import { useRouter } from "next/navigation";
+     7→     7→import { useForm } from "react-hook-form";
+     8→     8→import { z } from "zod";
+     9→     9→import { zodResolver } from "@hookform/resolvers/zod";
+    10→    10→import { useTheme } from "next-themes";
+    11→    11→import { toast } from "sonner";
+    12→    12→import { motion } from "framer-motion";
+    13→    13→import {
+    14→    14→  Banknote,
+    15→    15→  Truck,
+    16→    16→  RefreshCw,
+    17→    17→  Star,
+    18→    18→  CheckCircle2,
+    19→    19→  XCircle,
+    20→    20→  Minus,
+    21→    21→  Plus,
+    22→    22→  Ruler,
+    23→    23→  Loader2,
+    24→    24→  ShieldCheck,
+    25→    25→  ArrowDown,
+    26→    26→  ShoppingBag,
+    27→    27→  BadgePercent,
+    28→    28→} from "lucide-react";
+    29→    29→
+    30→    30→import { Button } from "@/components/ui/button";
+    31→    31→import { Card, CardContent } from "@/components/ui/card";
+    32→    32→import { Badge } from "@/components/ui/badge";
+    33→    33→import {
+    34→    34→  Dialog,
+    35→    35→  DialogContent,
+    36→    36→  DialogDescription,
+    37→    37→  DialogHeader,
+    38→    38→  DialogTitle,
+    39→    39→  DialogTrigger,
+    40→    40→} from "@/components/ui/dialog";
+    41→    41→import {
+    42→    42→  Select,
+    43→    43→  SelectContent,
+    44→    44→  SelectItem,
+    45→    45→  SelectTrigger,
+    46→    46→  SelectValue,
+    47→    47→} from "@/components/ui/select";
+    48→    48→import { Input } from "@/components/ui/input";
+    49→    49→import { Label } from "@/components/ui/label";
+    50→    50→import { MOROCCAN_CITIES } from "@/lib/constants";
+    51→    51→import { MA_PHONE_REGEX } from "@/lib/phone";
+    52→    52→import { orderDiscount, orderTotal } from "@/lib/pricing";
+    53→    53→import type { ProductDTO } from "@/lib/types";
+    54→    54→import { cn } from "@/lib/utils";
+    55→    55→
+    56→    56→const SIZE_CHART: { eu: string; cm: string }[] = [
+    57→    57→  { eu: "39", cm: "24.5" },
+    58→    58→  { eu: "40", cm: "25.0" },
+    59→    59→  { eu: "41", cm: "25.7" },
+    60→    60→  { eu: "42", cm: "26.0" },
+    61→    61→  { eu: "43", cm: "26.7" },
+    62→    62→  { eu: "44", cm: "27.3" },
+    63→    63→  { eu: "45", cm: "28.0" },
+    64→    64→];
+    65→    65→
+    66→    66→const formSchema = z.object({
+    67→    67→  name: z.string().trim().min(3, "الاسم قصير — كتب الاسم الكامل"),
+    68→    68→  phone: z
+    69→    69→    .string()
+    70→    70→    .trim()
+    71→    71→    .refine((v) => MA_PHONE_REGEX.test(v), "رقم الهاتف خاصو يكون 06 ولا 07 + 8 أرقام"),
+    72→    72→  city: z.string().min(1, "اختر المدينة"),
+    73→    73→  district: z.string().optional(),
+    74→    74→  landmark: z.string().optional(),
+    75→    75→});
+    76→    76→
+    77→    77→type FormData = z.infer<typeof formSchema>;
+    78→    78→
+    79→    79→interface LandingClientProps {
+    80→    80→  product: ProductDTO;
+    81→    81→}
+    82→    82→
+    83→    83→export function LandingClient({ product }: LandingClientProps) {
+    84→    84→  const router = useRouter();
+    85→    85→  const { setTheme } = useTheme();
+    86→    86→  const [color, setColor] = useState<string>(product.colors[0]?.name ?? "");
+    87→    87→  const [size, setSize] = useState<string>("");
+    88→    88→  const [quantity, setQuantity] = useState<number>(1);
+    89→    89→  const [submitting, setSubmitting] = useState(false);
+    90→    90→  const [sizeTouched, setSizeTouched] = useState(false);
+    91→    91→
+    92→    92→  // Landing page is always light
+    93→    93→  useEffect(() => {
+    94→    94→    setTheme("light");
+    95→    95→  }, [setTheme]);
+    96→    96→
+    97→    97→  const {
+    98→    98→    register,
+    99→    99→    handleSubmit,
+   100→   100→    watch,
+   101→   101→    setValue,
+   102→   102→    formState: { errors },
+   103→   103→  } = useForm<FormData>({
+   104→   104→    resolver: zodResolver(formSchema),
+   105→   105→    defaultValues: { name: "", phone: "", city: "", district: "", landmark: "" },
+   106→   106→  });
+   107→   107→
+   108→   108→  const phoneValue = watch("phone") ?? "";
+   109→   109→  const phoneState = useMemo(() => {
+   110→   110→    if (!phoneValue) return "empty" as const;
+   111→   111→    return MA_PHONE_REGEX.test(phoneValue) ? ("valid" as const) : ("invalid" as const);
+   112→   112→  }, [phoneValue]);
+   113→   113→
+   114→   114→  const images = product.imageUrls.length ? product.imageUrls : [];
+   115→   115→  const heroImage = images[0] ?? "";
+   116→   116→  const gallery = images.slice(1, 6);
+   117→   117→  const regularTotal = product.priceMad * quantity;
+   118→   118→  const discountMad = orderDiscount(quantity, product);
+   119→   119→  const total = orderTotal(quantity, product.priceMad, discountMad);
+   120→   120→  const hasOffer = !!product.offerQty && !!product.offerTotalMad;
+   121→   121→  const oldDiscount = product.oldPriceMad
+   122→   122→    ? Math.round((1 - product.priceMad / product.oldPriceMad) * 100)
+   123→   123→    : 0;
+   124→   124→
+   125→   125→  function scrollToForm() {
+   126→   126→    document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" });
+   127→   127→  }
+   128→   128→
+   129→   129→  async function onSubmit(values: FormData) {
+   130→   130→    if (!size) {
+   131→   131→      setSizeTouched(true);
+   132→   132→      toast.error("اختر المقاس أولا");
+   133→   133→      return;
+   134→   134→    }
+   135→   135→    setSubmitting(true);
+   136→   136→    try {
+   137→   137→      const res = await fetch("/api/orders", {
+   138→   138→        method: "POST",
+   139→   139→        headers: { "Content-Type": "application/json" },
+   140→   140→        body: JSON.stringify({
+   141→   141→          productId: product.id || undefined,
+   142→   142→          name: values.name,
+   143→   143→          phone: values.phone,
+   144→   144→          city: values.city,
+   145→   145→          district: values.district || null,
+   146→   146→          landmark: values.landmark || null,
+   147→   147→          size,
+   148→   148→          color: color || null,
+   149→   149→          quantity,
+   150→   150→        }),
+   151→   151→      });
+   152→   152→      const data = (await res.json()) as { orderNumber?: number; error?: string };
+   153→   153→      if (!res.ok || !data.orderNumber) {
+   154→   154→        toast.error(data.error || "وقع مشكل، عاود المحاولة");
+   155→   155→        return;
+   156→   156→      }
+   157→   157→      // Meta Pixel purchase event (only injected when pixel id is set)
+   158→   158→      const w = window as unknown as { fbq?: (...args: unknown[]) => void };
+   159→   159→      w.fbq?.("track", "Purchase", { value: total, currency: "MAD" });
+   160→   160→      router.push(`/success?n=${data.orderNumber}`);
+   161→   161→    } catch {
+   162→   162→      toast.error("تعذر الاتصال بالسيرفر، تحقق من الأنترنيت");
+   163→   163→    } finally {
+   164→   164→      setSubmitting(false);
+   165→   165→    }
+   166→   166→  }
+   167→   167→
+   168→   168→  const selectedColorHex = product.colors.find((c) => c.name === color)?.hex;
+   169→   169→
+   170→   170→  return (
+   171→   171→    <div className="bg-white text-stone-900 min-h-screen pb-24 md:pb-0">
+   172→   172→      {/* ── 1. Slim header ─────────────────────────────── */}
+   173→   173→      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-stone-100">
+   174→   174→        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+   175→   175→          <div className="flex items-center gap-2.5">
+   176→   176→            <span className="bg-stone-900 rounded-xl px-2 py-1.5 flex items-center shrink-0">
+   177→   177→              <Image
+   178→   178→                src="/logo.png"
+   179→   179→                alt="ShoeSpot"
+   180→   180→                width={96}
+   181→   181→                height={66}
+   182→   182→                priority
+   183→   183→                className="h-9 w-auto"
+   184→   184→              />
+   185→   185→            </span>
+   186→   186→          </div>
+   187→   187→          <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+   188→   188→            <Banknote className="h-3.5 w-3.5" />
+   189→   189→            الدفع عند الاستلام
+   190→   190→          </Badge>
+   191→   191→        </div>
+   192→   192→      </header>
+   193→   193→
+   194→   194→      <main className="max-w-5xl mx-auto px-4">
+   195→   195→        {/* ── 2. Hero ─────────────────────────────────── */}
+   196→   196→        <section className="pt-8 md:pt-14 pb-8 grid md:grid-cols-2 gap-8 items-center">
+   197→   197→          <div className="order-2 md:order-1 space-y-5">
+   198→   198→            <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1 text-sm font-semibold">
+   199→   199→              <Star className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+   200→   200→              4.8 <span className="text-stone-500 font-normal">| +1200 طلب</span>
+   201→   201→            </div>
+   202→   202→
+   203→   203→            <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
+   204→   204→              {product.name}
+   205→   205→            </h1>
+   206→   206→
+   207→   207→            <div className="flex items-center gap-3 flex-wrap">
+   208→   208→              <span className="text-4xl font-extrabold text-emerald-600">
+   209→   209→                {Math.round(product.priceMad)} درهم
+   210→   210→              </span>
+   211→   211→              {hasOffer && (
+   212→   212→                <Badge className="bg-stone-900 text-yellow-300 border-stone-900 hover:bg-stone-900 text-sm whitespace-nowrap">
+   213→   213→                  <BadgePercent className="h-3.5 w-3.5" />
+   214→   214→                  عرض خاص: {product.offerQty === 2 ? "زوج" : product.offerQty} بـ
+   215→   215→                  {Math.round(product.offerTotalMad ?? 0)} درهم
+   216→   216→                </Badge>
+   217→   217→              )}
+   218→   218→              {product.oldPriceMad && (
+   219→   219→                <>
+   220→   220→                  <span className="text-xl text-stone-400 line-through">
+   221→   221→                    {Math.round(product.oldPriceMad)} درهم
+   222→   222→                  </span>
+   223→   223→                  <Badge className="bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100 text-sm">
+   224→   224→                    <BadgePercent className="h-3.5 w-3.5" />−{oldDiscount}%
+   225→   225→                  </Badge>
+   226→   226→                </>
+   227→   227→              )}
+   228→   228→            </div>
+   229→   229→
+   230→   230→            <p className="text-stone-600 text-lg leading-relaxed">
+   231→   231→              سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع
+   232→   232→              المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.
+   233→   233→            </p>
+   234→   234→
+   235→   235→            <Button
+   236→   236→              size="lg"
+   237→   237→              onClick={scrollToForm}
+   238→   238→              className="w-full md:w-auto h-14 text-lg font-bold gap-2 shadow-lg shadow-emerald-600/20"
+   239→   239→            >
+   240→   240→              <ShoppingBag className="h-5 w-5" />
+   241→   241→              اطلب دابا — الدفع عند الاستلام
+   242→   242→            </Button>
+   243→   243→          </div>
+   244→   244→
+   245→   245→          <div className="order-1 md:order-2">
+   246→   246→            <motion.div
+   247→   247→              initial={{ opacity: 0, scale: 0.96 }}
+   248→   248→              animate={{ opacity: 1, scale: 1 }}
+   249→   249→              transition={{ duration: 0.5 }}
+   250→   250→              className="relative rounded-3xl overflow-hidden border border-stone-200 shadow-xl bg-stone-50"
+   251→   251→            >
+   252→   252→              {heroImage && (
+   253→   253→                <Image
+   254→   254→                  src={heroImage}
+   255→   255→                  alt={`${product.name} — الصورة الرئيسية`}
+   256→   256→                  width={1200}
+   257→   257→                  height={900}
+   258→   258→                  priority
+   259→   259→                  className="w-full h-auto object-cover"
+   260→   260→                  sizes="(max-width: 768px) 100vw, 50vw"
+   261→   261→                />
+   262→   262→              )}
+   263→   263→            </motion.div>
+   264→   264→          </div>
+   265→   265→        </section>
+   266→   266→
+   267→   267→        {/* ── 3. Benefits row ─────────────────────────── */}
+   268→   268→        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6">
+   269→   269→          {[
+   270→   270→            {
+   271→   271→              icon: Banknote,
+   272→   272→              title: "الدفع عند الاستلام",
+   273→   273→              text: "كتخلص فقط ملي توصلك السلعة",
+   274→   274→            },
+   275→   275→            {
+   276→   276→              icon: Truck,
+   277→   277→              title: "التوصيل فابور",
+   278→   278→              text: "لجميع المدن المغربية — 24-48 ساعة",
+   279→   279→            },
+   280→   280→            {
+   281→   281→              icon: RefreshCw,
+   282→   282→              title: "تبديل مجاني",
+   283→   283→              text: "المقاس ماجاكش؟ نبدلوهولك بلا فلوس",
+   284→   284→            },
+   285→   285→          ].map((b) => (
+   286→   286→            <Card key={b.title} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+   287→   287→              <CardContent className="flex items-center gap-4 p-5">
+   288→   288→                <div className="bg-emerald-50 text-emerald-600 rounded-xl p-3 shrink-0">
+   289→   289→                  <b.icon className="h-6 w-6" />
+   290→   290→                </div>
+   291→   291→                <div>
+   292→   292→                  <p className="font-bold">{b.title}</p>
+   293→   293→                  <p className="text-sm text-stone-500">{b.text}</p>
+   294→   294→                </div>
+   295→   295→              </CardContent>
+   296→   296→            </Card>
+   297→   297→          ))}
+   298→   298→        </section>
+   299→   299→
+   300→   300→        {/* ── 4. Product configurator ─────────────────── */}
+   301→   301→        <section className="py-6">
+   302→   302→          <Card className="border-stone-200 shadow-sm">
+   303→   303→            <CardContent className="p-5 md:p-8 space-y-6">
+   304→   304→              <div className="space-y-3">
+   305→   305→                <p className="font-bold text-lg">
+   306→   306→                  اللون <span className="text-stone-500 font-normal text-sm">({color})</span>
+   307→   307→                </p>
+   308→   308→                <div className="flex gap-3">
+   309→   309→                  {product.colors.map((c) => (
+   310→   310→                    <button
+   311→   311→                      key={c.name}
+   312→   312→                      type="button"
+   313→   313→                      onClick={() => setColor(c.name)}
+   314→   314→                      aria-label={`اختر اللون ${c.name}`}
+   315→   315→                      aria-pressed={color === c.name}
+   316→   316→                      className={cn(
+   317→   317→                        "h-11 w-11 rounded-full border-2 flex items-center justify-center transition-all",
+   318→   318→                        color === c.name
+   319→   319→                          ? "border-emerald-600 ring-2 ring-emerald-200 scale-110"
+   320→   320→                          : "border-stone-200 hover:border-stone-300"
+   321→   321→                      )}
+   322→   322→                      style={{ backgroundColor: c.hex }}
+   323→   323→                    >
+   324→   324→                      {color === c.name && (
+   325→   325→                        <CheckCircle2 className="h-5 w-5 text-emerald-700 mix-blend-difference" />
+   326→   326→                      )}
+   327→   327→                    </button>
+   328→   328→                  ))}
+   329→   329→                </div>
+   330→   330→              </div>
+   331→   331→
+   332→   332→              <div className="space-y-3">
+   333→   333→                <div className="flex items-center justify-between">
+   334→   334→                  <p className="font-bold text-lg">
+   335→   335→                    المقاس{" "}
+   336→   336→                    {sizeTouched && !size && (
+   337→   337→                      <span className="text-rose-600 text-sm font-normal">
+   338→   338→                        — المقاس مطلوب
+   339→   339→                      </span>
+   340→   340→                    )}
+   341→   341→                  </p>
+   342→   342→                  <Dialog>
+   343→   343→                    <DialogTrigger asChild>
+   344→   344→                      <Button variant="outline" size="sm" className="gap-1.5 h-9">
+   345→   345→                        <Ruler className="h-4 w-4" />
+   346→   346→                        جدول المقاسات
+   347→   347→                      </Button>
+   348→   348→                    </DialogTrigger>
+   349→   349→                    <DialogContent className="max-w-sm">
+   350→   350→                      <DialogHeader>
+   351→   351→                        <DialogTitle>جدول المقاسات</DialogTitle>
+   352→   352→                        <DialogDescription>
+   353→   353→                          قيس طول الرجل بسم وختار المقاس المناسب
+   354→   354→                        </DialogDescription>
+   355→   355→                      </DialogHeader>
+   356→   356→                      <table className="w-full text-center border-collapse">
+   357→   357→                        <thead>
+   358→   358→                          <tr className="bg-stone-100">
+   359→   359→                            <th className="p-2 font-bold rounded-r-md">المقاس EU</th>
+   360→   360→                            <th className="p-2 font-bold rounded-l-md">الطول (سم)</th>
+   361→   361→                          </tr>
+   362→   362→                        </thead>
+   363→   363→                        <tbody>
+   364→   364→                          {SIZE_CHART.map((row) => (
+   365→   365→                            <tr key={row.eu} className="border-b border-stone-100">
+   366→   366→                              <td className="p-2 ltr-num font-semibold">{row.eu}</td>
+   367→   367→                              <td className="p-2 ltr-num">{row.cm}</td>
+   368→   368→                            </tr>
+   369→   369→                          ))}
+   370→   370→                        </tbody>
+   371→   371→                      </table>
+   372→   372→                    </DialogContent>
+   373→   373→                  </Dialog>
+   374→   374→                </div>
+   375→   375→                <div className="flex flex-wrap gap-2">
+   376→   376→                  {product.sizes.map((s) => (
+   377→   377→                    <button
+   378→   378→                      key={s}
+   379→   379→                      type="button"
+   380→   380→                      onClick={() => {
+   381→   381→                        setSize(s);
+   382→   382→                        setSizeTouched(true);
+   383→   383→                      }}
+   384→   384→                      aria-label={`اختر المقاس ${s}`}
+   385→   385→                      aria-pressed={size === s}
+   386→   386→                      className={cn(
+   387→   387→                        "h-11 min-w-11 px-3 rounded-xl border-2 font-bold text-base transition-all",
+   388→   388→                        size === s
+   389→   389→                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+   390→   390→                          : "border-stone-200 text-stone-700 hover:border-stone-300"
+   391→   391→                      )}
+   392→   392→                    >
+   393→   393→                      <span className="ltr-num">{s}</span>
+   394→   394→                    </button>
+   395→   395→                  ))}
+   396→   396→                </div>
+   397→   397→              </div>
+   398→   398→
+   399→   399→              <div className="space-y-3">
+   400→   400→                <p className="font-bold text-lg">الكمية</p>
+   401→   401→                <div className="flex items-center gap-3">
+   402→   402→                  <button
+   403→   403→                    type="button"
+   404→   404→                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+   405→   405→                    aria-label="نقص الكمية"
+   406→   406→                    className="h-11 w-11 rounded-xl border-2 border-stone-200 flex items-center justify-center hover:border-stone-300"
+   407→   407→                  >
+   408→   408→                    <Minus className="h-4 w-4" />
+   409→   409→                  </button>
+   410→   410→                  <span className="ltr-num text-xl font-bold w-8 text-center">
+   411→   411→                    {quantity}
+   412→   412→                  </span>
+   413→   413→                  <button
+   414→   414→                    type="button"
+   415→   415→                    onClick={() => setQuantity((q) => Math.min(3, q + 1))}
+   416→   416→                    aria-label="زد الكمية"
+   417→   417→                    className="h-11 w-11 rounded-xl border-2 border-stone-200 flex items-center justify-center hover:border-stone-300"
+   418→   418→                  >
+   419→   419→                    <Plus className="h-4 w-4" />
+   420→   420→                  </button>
+   421→   421→                  <span className="text-sm text-stone-500">
+   422→   422→                    {hasOffer
+   423→   423→                      ? `الوحدة ${Math.round(product.priceMad)} درهم — ${
+   424→   424→                          product.offerQty === 2 ? "زوج" : product.offerQty
+   425→   425→                        } بـ${Math.round(product.offerTotalMad ?? 0)} درهم`
+   426→   426→                      : "(الحد الأقصى 3 فالطلب الواحد)"}
+   427→   427→                  </span>
+   428→   428→                </div>
+   429→   429→              </div>
+   430→   430→
+   431→   431→              <Button
+   432→   432→                size="lg"
+   433→   433→                onClick={scrollToForm}
+   434→   434→                variant="secondary"
+   435→   435→                className="w-full h-12 font-bold gap-2"
+   436→   436→              >
+   437→   437→                كمّل الطلب
+   438→   438→                <ArrowDown className="h-4 w-4" />
+   439→   439→              </Button>
+   440→   440→            </CardContent>
+   441→   441→          </Card>
+   442→   442→        </section>
+   443→   443→
+   444→   444→        {/* ── 5. Order form ───────────────────────────── */}
+   445→   445→        <section id="order-form" className="py-6 scroll-mt-20">
+   446→   446→          <Card className="border-2 border-emerald-100 shadow-lg shadow-emerald-600/5">
+   447→   447→            <CardContent className="p-5 md:p-8 space-y-6">
+   448→   448→              <div className="flex items-center gap-3">
+   449→   449→                <div className="bg-emerald-600 text-white rounded-full p-2">
+   450→   450→                  <Banknote className="h-5 w-5" />
+   451→   451→                </div>
+   452→   452→                <div>
+   453→   453→                  <h2 className="text-2xl font-extrabold">أكد الطلب ديالك</h2>
+   454→   454→                  <p className="text-stone-500 text-sm">
+   455→   455→                    عمّر المعلومات وغانعيطو ليك للتأكيد قبل الإرسال
+   456→   456→                  </p>
+   457→   457→                </div>
+   458→   458→              </div>
+   459→   459→
+   460→   460→              {/* live order summary */}
+   461→   461→              <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm space-y-1.5">
+   462→   462→                <p className="font-bold text-base mb-2">ملخص الطلب</p>
+   463→   463→                <div className="flex justify-between">
+   464→   464→                  <span className="text-stone-500">المنتج</span>
+   465→   465→                  <span className="font-semibold">{product.name}</span>
+   466→   466→                </div>
+   467→   467→                <div className="flex justify-between">
+   468→   468→                  <span className="text-stone-500">المقاس</span>
+   469→   469→                  <span className="font-semibold ltr-num">{size || "—"}</span>
+   470→   470→                </div>
+   471→   471→                <div className="flex justify-between">
+   472→   472→                  <span className="text-stone-500">اللون</span>
+   473→   473→                  <span className="font-semibold">
+   474→   474→                    {color || "—"}
+   475→   475→                    {selectedColorHex && (
+   476→   476→                      <span
+   477→   477→                        className="inline-block h-3.5 w-3.5 rounded-full border border-stone-300 ms-2 align-middle"
+   478→   478→                        style={{ backgroundColor: selectedColorHex }}
+   479→   479→                        aria-hidden="true"
+   480→   480→                      />
+   481→   481→                    )}
+   482→   482→                  </span>
+   483→   483→                </div>
+   484→   484→                <div className="flex justify-between">
+   485→   485→                  <span className="text-stone-500">الكمية</span>
+   486→   486→                  <span className="font-semibold ltr-num">{quantity}</span>
+   487→   487→                </div>
+   488→   488→                <div className="flex justify-between border-t border-stone-200 pt-2 mt-2 text-base">
+   489→   489→                  <span className="font-bold">المجموع</span>
+   490→   490→                  <span className="font-extrabold text-emerald-600 ltr-num flex items-center gap-2">
+   491→   491→                    {discountMad > 0 && (
+   492→   492→                      <span className="text-sm font-normal text-stone-400 line-through ltr-num">
+   493→   493→                        {Math.round(regularTotal)} درهم
+   494→   494→                      </span>
+   495→   495→                    )}
+   496→   496→                    {Math.round(total)} درهم
+   497→   497→                  </span>
+   498→   498→                </div>
+   499→   499→                {discountMad > 0 && (
+   500→   500→                  <div className="flex justify-between">
+   501→   501→                    <span className="text-emerald-700 text-sm font-semibold">
+   502→   502→                      وفّرت {Math.round(discountMad)} درهم مع عرض الزوج
+   503→   503→                    </span>
+   504→   504→                    <span className="text-stone-400 text-sm">الدفع عند الاستلام</span>
+   505→   505→                  </div>
+   506→   506→                )}
+   507→   507→              </div>
+   508→   508→
+   509→   509→              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+   510→   510→                <div className="grid sm:grid-cols-2 gap-5">
+   511→   511→                  <div className="space-y-2">
+   512→   512→                    <Label htmlFor="name">الاسم الكامل *</Label>
+   513→   513→                    <Input
+   514→   514→                      id="name"
+   515→   515→                      placeholder="مثلا: يوسف العلمي"
+   516→   516→                      autoComplete="name"
+   517→   517→                      className="h-12"
+   518→   518→                      aria-invalid={!!errors.name}
+   519→   519→                      {...register("name")}
+   520→   520→                    />
+   521→   521→                    {errors.name && (
+   522→   522→                      <p className="text-sm text-rose-600">{errors.name.message}</p>
+   523→   523→                    )}
+   524→   524→                  </div>
+   525→   525→
+   526→   526→                  <div className="space-y-2">
+   527→   527→                    <Label htmlFor="phone">رقم الهاتف *</Label>
+   528→   528→                    <div className="relative">
+   529→   529→                      <Input
+   530→   530→                        id="phone"
+   531→   531→                        inputMode="numeric"
+   532→   532→                        autoComplete="tel"
+   533→   533→                        placeholder="06XXXXXXXX"
+   534→   534→                        dir="ltr"
+   535→   535→                        className={cn(
+   536→   536→                          "h-12 text-left ltr-num",
+   537→   537→                          phoneState === "valid" && "border-emerald-500 focus-visible:ring-emerald-500/30",
+   538→   538→                          phoneState === "invalid" && "border-rose-400 focus-visible:ring-rose-500/30"
+   539→   539→                        )}
+   540→   540→                        aria-invalid={!!errors.phone || phoneState === "invalid"}
+   541→   541→                        {...register("phone")}
+   542→   542→                      />
+   543→   543→                      {phoneState === "valid" && (
+   544→   544→                        <CheckCircle2 className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+   545→   545→                      )}
+   546→   546→                      {phoneState === "invalid" && (
+   547→   547→                        <XCircle className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-rose-500" />
+   548→   548→                      )}
+   549→   549→                    </div>
+   550→   550→                    {phoneState === "invalid" && !errors.phone && (
+   551→   551→                      <p className="text-sm text-rose-600">
+   552→   552→                        {phoneValue.startsWith("0") || phoneValue.length < 10
+   553→   553→                          ? "رقم ناقص — خاصو يكون 06 ولا 07 + 8 أرقام"
+   554→   554→                          : "رقم غير صحيح — تحقق منو"}
+   555→   555→                      </p>
+   556→   556→                    )}
+   557→   557→                    {errors.phone && (
+   558→   558→                      <p className="text-sm text-rose-600">{errors.phone.message}</p>
+   559→   559→                    )}
+   560→   560→                  </div>
+   561→   561→
+   562→   562→                  <div className="space-y-2">
+   563→   563→                    <Label htmlFor="city">المدينة *</Label>
+   564→   564→                    <Select
+   565→   565→                      value={watch("city")}
+   566→   566→                      onValueChange={(v) => setValue("city", v, { shouldValidate: true })}
+   567→   567→                    >
+   568→   568→                      <SelectTrigger id="city" className="h-12">
+   569→   569→                        <SelectValue placeholder="اختر المدينة" />
+   570→   570→                      </SelectTrigger>
+   571→   571→                      <SelectContent className="max-h-72">
+   572→   572→                        {MOROCCAN_CITIES.map((city) => (
+   573→   573→                          <SelectItem key={city} value={city}>
+   574→   574→                            {city}
+   575→   575→                          </SelectItem>
+   576→   576→                        ))}
+   577→   577→                      </SelectContent>
+   578→   578→                    </Select>
+   579→   579→                    {errors.city && (
+   580→   580→                      <p className="text-sm text-rose-600">{errors.city.message}</p>
+   581→   581→                    )}
+   582→   582→                  </div>
+   583→   583→
+   584→   584→                  <div className="space-y-2">
+   585→   585→                    <Label htmlFor="district">الحي (اختياري)</Label>
+   586→   586→                    <Input
+   587→   587→                      id="district"
+   588→   588→                      placeholder="مثلا: حي المعاريف"
+   589→   589→                      className="h-12"
+   590→   590→                      {...register("district")}
+   591→   591→                    />
+   592→   592→                  </div>
+   593→   593→
+   594→   594→                  <div className="space-y-2 sm:col-span-2">
+   595→   595→                    <Label htmlFor="landmark">نقطة دالة قريبة (اختياري)</Label>
+   596→   596→                    <Input
+   597→   597→                      id="landmark"
+   598→   598→                      placeholder="مثلا: قرب جامع، فرمة، مدرسة..."
+   599→   599→                      className="h-12"
+   600→   600→                      {...register("landmark")}
+   601→   601→                    />
+   602→   602→                  </div>
+   603→   603→                </div>
+   604→   604→
+   605→   605→                <Button
+   606→   606→                  type="submit"
+   607→   607→                  size="lg"
+   608→   608→                  disabled={submitting}
+   609→   609→                  className="w-full h-14 text-lg font-extrabold gap-2 shadow-lg shadow-emerald-600/25"
+   610→   610→                >
+   611→   611→                  {submitting ? (
+   612→   612→                    <>
+   613→   613→                      <Loader2 className="h-5 w-5 animate-spin" />
+   614→   614→                      كنسجلو الطلب...
+   615→   615→                    </>
+   616→   616→                  ) : (
+   617→   617→                    <>
+   618→   618→                      <ShieldCheck className="h-5 w-5" />
+   619→   619→                      أكد الطلب — {Math.round(total)} درهم عند الاستلام
+   620→   620→                    </>
+   621→   621→                  )}
+   622→   622→                </Button>
+   623→   623→              </form>
+   624→   624→            </CardContent>
+   625→   625→          </Card>
+   626→   626→        </section>
+   627→   627→
+   628→   628→        {/* ── 6. Trust strip ──────────────────────────── */}
+   629→   629→        <section className="py-6">
+   630→   630→          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 border border-stone-200 rounded-2xl p-4">
+   631→   631→            {[
+   632→   632→              { icon: Banknote, text: "الدفع عند الاستلام" },
+   633→   633→              { icon: RefreshCw, text: "تبديل مجاني للمقاس" },
+   634→   634→              { icon: Truck, text: "التوصيل فابور" },
+   635→   635→            ].map((t) => (
+   636→   636→              <div key={t.text} className="flex items-center justify-center gap-2 py-2">
+   637→   637→                <t.icon className="h-5 w-5 text-emerald-600" />
+   638→   638→                <span className="font-semibold text-stone-700">{t.text}</span>
+   639→   639→              </div>
+   640→   640→            ))}
+   641→   641→          </div>
+   642→   642→        </section>
+   643→   643→
+   644→   644→        {/* ── 7. Gallery ──────────────────────────────── */}
+   645→   645→        {gallery.length > 0 && (
+   646→   646→          <section className="py-6 pb-10">
+   647→   647→            <h2 className="text-2xl font-extrabold mb-4">صور المنتج</h2>
+   648→   648→            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+   649→   649→              {gallery.map((src, i) => (
+   650→   650→                <div
+   651→   651→                  key={src}
+   652→   652→                  className="relative aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-stone-50"
+   653→   653→                >
+   654→   654→                  <Image
+   655→   655→                    src={src}
+   656→   656→                    alt={`${product.name} — صورة ${i + 2}`}
+   657→   657→                    fill
+   658→   658→                    className="object-cover hover:scale-105 transition-transform duration-300"
+   659→   659→                    sizes="(max-width: 768px) 50vw, 33vw"
+   660→   660→                  />
+   661→   661→                </div>
+   662→   662→              ))}
+   663→   663→            </div>
+   664→   664→          </section>
+   665→   665→        )}
+   666→   666→      </main>
+   667→   667→
+   668→   668→      {/* ── 8. Footer ─────────────────────────────────── */}
+   669→   669→      <footer className="border-t border-stone-100 py-6">
+   670→   670→        <div className="max-w-5xl mx-auto px-4 text-center space-y-2">
+   671→   671→          <p className="text-stone-600 text-sm">
+   672→   672→            © 2026 ShoeSpot — الدفع عند الاستلام فجميع المغرب
+   673→   673→          </p>
+   674→   674→          <Link
+   675→   675→            href="/login"
+   676→   676→            className="text-stone-400 text-xs hover:text-stone-500 transition-colors"
+   677→   677→          >
+   678→   678→            دخول المسؤول
+   679→   679→          </Link>
+   680→   680→        </div>
+   681→   681→      </footer>
+   682→   682→
+   683→   683→      {/* ── 9. Sticky mobile CTA ──────────────────────── */}
+   684→   684→      <div
+   685→   685→        className="fixed bottom-0 inset-x-0 z-40 md:hidden bg-white border-t border-stone-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+   686→   686→        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+   687→   687→      >
+   688→   688→        <div className="flex items-center justify-between gap-3 px-4 py-3">
+   689→   689→          <div className="flex flex-col">
+   690→   690→            {hasOffer ? (
+   691→   691→              <>
+   692→   692→                <span className="text-sm font-bold text-stone-900">
+   693→   693→                  <span className="text-emerald-600 ltr-num">
+   694→   694→                    {Math.round(product.offerTotalMad ?? 0)} درهم
+   695→   695→                  </span>{" "}
+   696→   696→                  {product.offerQty === 2 ? "للزوج" : `لـ${product.offerQty}`}
+   697→   697→                </span>
+   698→   698→                <span className="text-xs text-stone-400 ltr-num">
+   699→   699→                  الوحدة {Math.round(product.priceMad)} درهم
+   700→   700→                </span>
+   701→   701→              </>
+   702→   702→            ) : (
+   703→   703→              <span className="text-xl font-extrabold text-emerald-600 ltr-num">
+   704→   704→                {Math.round(product.priceMad)} درهم
+   705→   705→              </span>
+   706→   706→            )}
+   707→   707→          </div>
+   708→   708→          <Button
+   709→   709→            onClick={scrollToForm}
+   710→   710→            className="h-12 px-6 text-base font-bold flex-1 max-w-64"
+   711→   711→          >
+   712→   712→            <ShoppingBag className="h-5 w-5" />
+   713→   713→            اطلب دابا
+   714→   714→          </Button>
+   715→   715→        </div>
+   716→   716→      </div>
+   717→   717→    </div>
+   718→   718→  );
+   719→   719→}
+   720→   720→

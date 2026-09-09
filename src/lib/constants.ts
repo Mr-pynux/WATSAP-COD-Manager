@@ -137,3 +137,13 @@ export const EVENT_TYPES = {
   whatsappClick: "whatsapp_click",
   statusChange: "status_change",
 } as const;
+
+/** Quick-pick image library for the admin product editor (OSS-hosted sneaker photos). */
+export const PRODUCT_ASSET_LIBRARY = [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/16e2e26e2d2f.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0ebaa6145dcb.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/60716d5bb2e0.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/6fdca56479ce.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b7f0de266de9.png",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8fa13a4e54cc.jpg",
+];

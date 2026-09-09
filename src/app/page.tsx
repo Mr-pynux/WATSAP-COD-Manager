@@ -20,6 +20,10 @@ const FALLBACK: ProductDTO = {
   id: "",
   name: "حذاء رياضي Urban Step",
   imageUrls: FALLBACK_IMAGES,
+  videoUrl: null,
+  description:
+    "سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.",
+  features: [],
   priceMad: 150,
   oldPriceMad: null,
   offerQty: 2,

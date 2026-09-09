@@ -67,3 +67,11 @@ supabase/migrations/     production Postgres port (RLS included) — see below
 
 ## Demo credentials
 admin@shop.ma / admin123 (see .env; change before going live)
+
+### Product management (v1.1)
+- `/admin/products` — product list (active toggle, delete-guard when orders exist)
+- `/admin/products/[id]` — full editor: images (URL/upload/library + reorder), videoUrl, description, features, prices, offer, sizes, colors
+- APIs: `GET/POST /api/admin/products`, `GET/PUT/DELETE /api/admin/products/[id]` (zod via `src/lib/product-schema.ts`), `POST /api/admin/upload` (images → `uploads/` dir), `GET /api/media/[name]` (serves uploads, path-traversal safe)
+- Product model extra columns: `videoUrl`, `description`, `features` (JSON string array)
+- Landing: `Product3DViewer` (drag-to-rotate 360 illusion, hover tilt, floor reflection, video item, fullscreen dialog) — plain `<img>` everywhere user-editable URLs render
+- Brand: gold `#f0c000` (--primary + `brand` token) from logo, dark studio stage, black/yellow badges

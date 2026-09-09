@@ -91,3 +91,24 @@ Work Log:
 
 Stage Summary:
 - App fully rebranded ShoeSpot with real pricing (150 / pair 220 / free delivery), user's logo and WhatsApp number. All flows re-verified end-to-end.
+
+---
+Task ID: 8
+Agent: Super Z (main)
+Task: آلية تحكم فالمنتجات (صور/فيديو/أوصاف/أثمنة) + واجهة متناسقة مع اللوغو + عارض 3D للمنتج
+
+Work Log:
+- Schema: Product += videoUrl / description / features (JSON) → db:push + prisma generate
+- Types/serialize/page fallback: ProductDTO += الحقول الجداد
+- APIs: lib/product-schema.ts (zod + toProductColumns)؛ GET/POST /api/admin/products، GET/PUT/DELETE /api/admin/products/[id] (حذف ممنوع إلا عندو طلبات 409)؛ POST /api/admin/upload (صور ≤6MB → uploads/ مع UUID)؛ GET /api/media/[name] (تقديم آمن ضد path traversal، cache immutable)
+- عارض 3D (src/components/public/product-3d-viewer.tsx): سحب أفقي = دوران 360 عبر الصور (90px/إطار) + rotateY أثناء السحب، ميلان rotateX/Y مع الماوس، انعكاس أرضي mask، ظل بيضاوي، float أنيميشن، دوران تلقائي، سهمين desktop، مصغرات، فيديو item، ديالوغ ملء الشاشة، keyboard arrows، touch-action pan-y، hint chip كيختفي بعد أول تفاعل — style Figma studio (dark + glow ذهبي)
+- إعادة تصميم الواجهة بهوية اللوغو (استخراج ألوان PIL: #f0c000 ذهبي + أبيض): globals.css brand tokens + --primary ذهبي فاتح/داكن، landing كامل (hero + viewer، benefits رمادي/ذهبي، trust strip أسود، CTA ذهبي، footer أسود) + عرض description/features من DB + زر فيديو فالمعرض
+- لوحة المنتجات: /admin/products (كاروط + active switch + حذف AlertDialog) + /admin/products/[id] محرر كامل (صور reorder/حذف/رابط/رفع/مكتبة، فيديو + preview، وصف + مميزات dynamic، أثمنة + preview عرض، مقاسات/ألوان، dirty indicator، sticky save)
+- admin-shell: NAV += المنتات (Package) + pageTitle ديناميكي
+- seed += description/features؛ scripts/enrich-product.ts حدّث المنتج الحالي بلا مسح الطلبات
+- إصلاحات: lint set-state-in-effect (derived index بدل effects)؛ .env تنقى من init-fullstack.sh → استرجاع كامل (ADMIN creds + SESSION_SECRET جديد + SELLER_WHATSAPP) + restart تزامن Node/middleware؛ RTL grid blowout من strip المصغرات (min-w-0) → overflow: false ف390px؛ Dialog aria-describedby
+- E2E agent-browser: landing (stage/hint/desc/features/11 thumbs/offer/زر ذهبي)؛ سحب 0→3 إطارات + hint كيختفي؛ tilt rotateX(1.5°) rotateY(2.8°)؛ ديالوغ ملء الشاشة + فيديو كيشتغل فيه؛ طلب qty2 → وفّرت 80 / 220 → ORD-19؛ login + /admin/products + محرر prefilled (name/desc130/150/220/ميزة/6 صور)؛ بدّل ثمن 160 + فيديو sample → landing كيبان 160 + video tile؛ upload curl 201 + media 200 + traversal 400 + بدون cookie 401؛ upload من UI (agent-browser upload) → صف فالقائمة؛ رجّع 150 + حيد الفيديو والصورة المرفوعة → landing سليم؛ success wa.me/212696910965؛ lint 0/0؛ صفر أخطاء كونسول
+- Screenshots: scripts/landing-new.png، landing-final.png، landing-mobile-fixed.png، landing-hero-3d.png، admin-products.png، admin-editor.png
+
+Stage Summary:
+- تحكم كامل فالمنتج من اللوحة (صور/فيديو/أوصاف/أثمنة) + هوية ذهبية متناسقة مع اللوغو + عارض 3D للفحص بالسحب/الميلان/الفيديو. البيانات التجريبية مرجعة (150/زوج220/6 صور/بلا فيديو)، الطلبات محفوظة، lint نظيف.

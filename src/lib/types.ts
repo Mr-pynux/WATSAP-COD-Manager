@@ -9,6 +9,9 @@ export interface ProductDTO {
   id: string;
   name: string;
   imageUrls: string[];
+  videoUrl: string | null;
+  description: string | null;
+  features: string[];
   priceMad: number;
   oldPriceMad: number | null;
   offerQty: number | null;

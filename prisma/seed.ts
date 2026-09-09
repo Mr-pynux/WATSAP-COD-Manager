@@ -226,6 +226,14 @@ async function main() {
   const product = await prisma.product.create({
     data: {
       name: "حذاء رياضي Urban Step",
+      description:
+        "سنيكرز خفيف ومريح بتصميم عصري، صالح للاستعمال اليومي وللرياضة — والتوصيل فابور لجميع المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.",
+      features: JSON.stringify([
+        "جلد صناعي عالي الجودة كيتنفس",
+        "نعل مطاطي مضاد للانزلاق",
+        "خفيف بزاف — مناسب للمشي الطويل",
+        "تصميم عصري كيمشي مع كل اللبسة",
+      ]),
       priceMad: UNIT_PRICE,
       oldPriceMad: null,
       offerQty: OFFER_QTY,

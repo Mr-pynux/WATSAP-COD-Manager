@@ -69,3 +69,20 @@ admin@shop.ma / admin123
 - Pricing: unit **150 MAD**; pair offer **2 for 220 MAD** (Product.offerQty/offerTotalMad; per-order `discountMad`)
 - Free delivery messaging on the landing
 - Seller WhatsApp: `NEXT_PUBLIC_SELLER_WHATSAPP=212696910965`
+
+## إدارة المنتجات (لوحة التحكم)
+
+صفحة **/admin/products** كاتسمح بالتحكم الكامل فالمنتج بلا ما تحتاج تعدل الكود:
+
+- **الصور**: زيد من رابط، رفع من الجهاز (تتخزن فـ `uploads/` وتقدم عبر `/api/media/`), ولا من مكتبة جاهزة — مع ترتيب بالسهم واختيار الصورة الرئيسية
+- **الفيديو**: رابط MP4 مباشر كيبان فعارض 360° فالصفحة الرئيسية
+- **الأوصاف**: وصف طويل + قائمة مميزات (كتبانو تحت الوصف)
+- **الأثمنة**: ثمن الوحدة، الثمن القديم، التكلفة، وعرض الزوج — مع تحقق من منطق العرض
+- **المقاسات والألوان** + تفعيل/تعطيل المنتج
+
+الواجهة العامة معاود التصميم بهوية اللوغو (ذهبي `#f0c000` / أسود / أبيض) مع **عارض 3D**: سحب باش تدور المنتج 360°، ميلان مع الماوس، انعكاس أرضي، وفحص بحجم كبير.
+
+### APIs الجديدة
+
+- `GET/POST /api/admin/products` · `GET/PUT/DELETE /api/admin/products/[id]`
+- `POST /api/admin/upload` (multipart, admin-only) · `GET /api/media/[name]`

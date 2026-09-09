@@ -11,6 +11,9 @@ model Product {
   id          String   @id @default(cuid())
   name        String
   imageUrls   String // JSON array
+  videoUrl    String? // product video (mp4 / direct link)
+  description String? // long marketing description (darija)
+  features    String? // JSON array of bullet points
   priceMad    Float
   oldPriceMad Float?
   offerQty    Int? // bundle offer size, e.g. 2 = pair

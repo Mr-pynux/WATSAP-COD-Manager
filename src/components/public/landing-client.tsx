@@ -25,6 +25,10 @@ import {
   ArrowDown,
   ShoppingBag,
   BadgePercent,
+  Check,
+  Maximize2,
+  Play,
+  RotateCw,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +54,7 @@ import { Label } from "@/components/ui/label";
 import { MOROCCAN_CITIES } from "@/lib/constants";
 import { MA_PHONE_REGEX } from "@/lib/phone";
 import { orderDiscount, orderTotal } from "@/lib/pricing";
+import { Product3DViewer } from "@/components/public/product-3d-viewer";
 import type { ProductDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +85,9 @@ interface LandingClientProps {
   product: ProductDTO;
 }
 
+const FALLBACK_DESCRIPTION =
+  "سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.";
+
 export function LandingClient({ product }: LandingClientProps) {
   const router = useRouter();
   const { setTheme } = useTheme();
@@ -88,6 +96,7 @@ export function LandingClient({ product }: LandingClientProps) {
   const [quantity, setQuantity] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
   const [sizeTouched, setSizeTouched] = useState(false);
+  const [inspectIndex, setInspectIndex] = useState<number | null>(null);
 
   // Landing page is always light
   useEffect(() => {
@@ -111,9 +120,8 @@ export function LandingClient({ product }: LandingClientProps) {
     return MA_PHONE_REGEX.test(phoneValue) ? ("valid" as const) : ("invalid" as const);
   }, [phoneValue]);
 
-  const images = product.imageUrls.length ? product.imageUrls : [];
-  const heroImage = images[0] ?? "";
-  const gallery = images.slice(1, 6);
+  const images = product.imageUrls;
+  const description = product.description || FALLBACK_DESCRIPTION;
   const regularTotal = product.priceMad * quantity;
   const discountMad = orderDiscount(quantity, product);
   const total = orderTotal(quantity, product.priceMad, discountMad);
@@ -173,7 +181,7 @@ export function LandingClient({ product }: LandingClientProps) {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-stone-100">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="bg-stone-900 rounded-xl px-2 py-1.5 flex items-center shrink-0">
+            <span className="bg-stone-950 rounded-xl px-2 py-1.5 flex items-center shrink-0">
               <Image
                 src="/logo.png"
                 alt="ShoeSpot"
@@ -184,7 +192,7 @@ export function LandingClient({ product }: LandingClientProps) {
               />
             </span>
           </div>
-          <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+          <Badge className="bg-stone-950 text-brand border-stone-950 hover:bg-stone-950">
             <Banknote className="h-3.5 w-3.5" />
             الدفع عند الاستلام
           </Badge>
@@ -192,11 +200,11 @@ export function LandingClient({ product }: LandingClientProps) {
       </header>
 
       <main className="max-w-5xl mx-auto px-4">
-        {/* ── 2. Hero ─────────────────────────────────── */}
+        {/* ── 2. Hero + 3D viewer ─────────────────────── */}
         <section className="pt-8 md:pt-14 pb-8 grid md:grid-cols-2 gap-8 items-center">
           <div className="order-2 md:order-1 space-y-5">
-            <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1 text-sm font-semibold">
-              <Star className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+            <div className="inline-flex items-center gap-1.5 bg-brand-soft text-stone-900 border border-brand/50 rounded-full px-3 py-1 text-sm font-semibold">
+              <Star className="h-4 w-4 fill-brand-strong text-brand-strong" />
               4.8 <span className="text-stone-500 font-normal">| +1200 طلب</span>
             </div>
 
@@ -205,11 +213,12 @@ export function LandingClient({ product }: LandingClientProps) {
             </h1>
 
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-4xl font-extrabold text-emerald-600">
-                {Math.round(product.priceMad)} درهم
+              <span className="text-4xl font-extrabold text-stone-950 ltr-num">
+                {Math.round(product.priceMad)}{" "}
+                <span className="text-2xl">درهم</span>
               </span>
               {hasOffer && (
-                <Badge className="bg-stone-900 text-yellow-300 border-stone-900 hover:bg-stone-900 text-sm whitespace-nowrap">
+                <Badge className="bg-stone-950 text-brand border-stone-950 hover:bg-stone-950 text-sm whitespace-nowrap">
                   <BadgePercent className="h-3.5 w-3.5" />
                   عرض خاص: {product.offerQty === 2 ? "زوج" : product.offerQty} بـ
                   {Math.round(product.offerTotalMad ?? 0)} درهم
@@ -217,7 +226,7 @@ export function LandingClient({ product }: LandingClientProps) {
               )}
               {product.oldPriceMad && (
                 <>
-                  <span className="text-xl text-stone-400 line-through">
+                  <span className="text-xl text-stone-400 line-through ltr-num">
                     {Math.round(product.oldPriceMad)} درهم
                   </span>
                   <Badge className="bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100 text-sm">
@@ -227,39 +236,45 @@ export function LandingClient({ product }: LandingClientProps) {
               )}
             </div>
 
-            <p className="text-stone-600 text-lg leading-relaxed">
-              سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع
-              المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.
-            </p>
+            <p className="text-stone-600 text-lg leading-relaxed">{description}</p>
+
+            {product.features.length > 0 && (
+              <ul className="space-y-2">
+                {product.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2.5 text-stone-800">
+                    <span className="bg-brand rounded-full p-1 shrink-0">
+                      <Check className="h-3.5 w-3.5 text-stone-950" strokeWidth={3} />
+                    </span>
+                    <span className="font-semibold">{f}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <Button
               size="lg"
               onClick={scrollToForm}
-              className="w-full md:w-auto h-14 text-lg font-bold gap-2 shadow-lg shadow-emerald-600/20"
+              className="w-full md:w-auto h-14 text-lg font-extrabold gap-2 shadow-lg shadow-brand/30"
             >
               <ShoppingBag className="h-5 w-5" />
               اطلب دابا — الدفع عند الاستلام
             </Button>
           </div>
 
-          <div className="order-1 md:order-2">
+          <div className="order-1 md:order-2 min-w-0">
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="relative rounded-3xl overflow-hidden border border-stone-200 shadow-xl bg-stone-50"
+              className="min-w-0"
             >
-              {heroImage && (
-                <Image
-                  src={heroImage}
-                  alt={`${product.name} — الصورة الرئيسية`}
-                  width={1200}
-                  height={900}
-                  priority
-                  className="w-full h-auto object-cover"
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                />
-              )}
+              <Product3DViewer
+                name={product.name}
+                images={images}
+                videoUrl={product.videoUrl}
+                openIndex={inspectIndex}
+                onOpenIndexChange={setInspectIndex}
+              />
             </motion.div>
           </div>
         </section>
@@ -285,7 +300,7 @@ export function LandingClient({ product }: LandingClientProps) {
           ].map((b) => (
             <Card key={b.title} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow">
               <CardContent className="flex items-center gap-4 p-5">
-                <div className="bg-emerald-50 text-emerald-600 rounded-xl p-3 shrink-0">
+                <div className="bg-stone-950 text-brand rounded-xl p-3 shrink-0">
                   <b.icon className="h-6 w-6" />
                 </div>
                 <div>
@@ -316,13 +331,13 @@ export function LandingClient({ product }: LandingClientProps) {
                       className={cn(
                         "h-11 w-11 rounded-full border-2 flex items-center justify-center transition-all",
                         color === c.name
-                          ? "border-emerald-600 ring-2 ring-emerald-200 scale-110"
+                          ? "border-brand-strong ring-2 ring-brand/50 scale-110"
                           : "border-stone-200 hover:border-stone-300"
                       )}
                       style={{ backgroundColor: c.hex }}
                     >
                       {color === c.name && (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-700 mix-blend-difference" />
+                        <CheckCircle2 className="h-5 w-5 text-stone-950 mix-blend-difference" />
                       )}
                     </button>
                   ))}
@@ -386,7 +401,7 @@ export function LandingClient({ product }: LandingClientProps) {
                       className={cn(
                         "h-11 min-w-11 px-3 rounded-xl border-2 font-bold text-base transition-all",
                         size === s
-                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                          ? "border-brand bg-brand/20 text-stone-950"
                           : "border-stone-200 text-stone-700 hover:border-stone-300"
                       )}
                     >
@@ -443,10 +458,10 @@ export function LandingClient({ product }: LandingClientProps) {
 
         {/* ── 5. Order form ───────────────────────────── */}
         <section id="order-form" className="py-6 scroll-mt-20">
-          <Card className="border-2 border-emerald-100 shadow-lg shadow-emerald-600/5">
+          <Card className="border-2 border-brand/40 shadow-lg shadow-brand/10">
             <CardContent className="p-5 md:p-8 space-y-6">
               <div className="flex items-center gap-3">
-                <div className="bg-emerald-600 text-white rounded-full p-2">
+                <div className="bg-stone-950 text-brand rounded-full p-2">
                   <Banknote className="h-5 w-5" />
                 </div>
                 <div>
@@ -487,7 +502,7 @@ export function LandingClient({ product }: LandingClientProps) {
                 </div>
                 <div className="flex justify-between border-t border-stone-200 pt-2 mt-2 text-base">
                   <span className="font-bold">المجموع</span>
-                  <span className="font-extrabold text-emerald-600 ltr-num flex items-center gap-2">
+                  <span className="font-extrabold text-stone-950 ltr-num flex items-center gap-2">
                     {discountMad > 0 && (
                       <span className="text-sm font-normal text-stone-400 line-through ltr-num">
                         {Math.round(regularTotal)} درهم
@@ -498,7 +513,7 @@ export function LandingClient({ product }: LandingClientProps) {
                 </div>
                 {discountMad > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-emerald-700 text-sm font-semibold">
+                    <span className="text-stone-900 text-sm font-semibold">
                       وفّرت {Math.round(discountMad)} درهم مع عرض الزوج
                     </span>
                     <span className="text-stone-400 text-sm">الدفع عند الاستلام</span>
@@ -534,14 +549,14 @@ export function LandingClient({ product }: LandingClientProps) {
                         dir="ltr"
                         className={cn(
                           "h-12 text-left ltr-num",
-                          phoneState === "valid" && "border-emerald-500 focus-visible:ring-emerald-500/30",
+                          phoneState === "valid" && "border-brand-strong focus-visible:ring-brand/30",
                           phoneState === "invalid" && "border-rose-400 focus-visible:ring-rose-500/30"
                         )}
                         aria-invalid={!!errors.phone || phoneState === "invalid"}
                         {...register("phone")}
                       />
                       {phoneState === "valid" && (
-                        <CheckCircle2 className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+                        <CheckCircle2 className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-brand-strong" />
                       )}
                       {phoneState === "invalid" && (
                         <XCircle className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-rose-500" />
@@ -606,7 +621,7 @@ export function LandingClient({ product }: LandingClientProps) {
                   type="submit"
                   size="lg"
                   disabled={submitting}
-                  className="w-full h-14 text-lg font-extrabold gap-2 shadow-lg shadow-emerald-600/25"
+                  className="w-full h-14 text-lg font-extrabold gap-2 shadow-lg shadow-brand/30"
                 >
                   {submitting ? (
                     <>
@@ -625,55 +640,79 @@ export function LandingClient({ product }: LandingClientProps) {
           </Card>
         </section>
 
-        {/* ── 6. Trust strip ──────────────────────────── */}
+        {/* ── 6. Trust strip (dark, logo-style) ───────── */}
         <section className="py-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 border border-stone-200 rounded-2xl p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-950 rounded-2xl p-4 border border-stone-800">
             {[
               { icon: Banknote, text: "الدفع عند الاستلام" },
               { icon: RefreshCw, text: "تبديل مجاني للمقاس" },
               { icon: Truck, text: "التوصيل فابور" },
             ].map((t) => (
               <div key={t.text} className="flex items-center justify-center gap-2 py-2">
-                <t.icon className="h-5 w-5 text-emerald-600" />
-                <span className="font-semibold text-stone-700">{t.text}</span>
+                <t.icon className="h-5 w-5 text-brand" />
+                <span className="font-semibold text-white">{t.text}</span>
               </div>
             ))}
           </div>
         </section>
 
-        {/* ── 7. Gallery ──────────────────────────────── */}
-        {gallery.length > 0 && (
+        {/* ── 7. Gallery (opens 3D inspection) ────────── */}
+        {(images.length > 1 || product.videoUrl) && (
           <section className="py-6 pb-10">
-            <h2 className="text-2xl font-extrabold mb-4">صور المنتج</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <RotateCw className="h-5 w-5 text-brand-strong" />
+              <h2 className="text-2xl font-extrabold">شوف المنتج من جميع الجهات</h2>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {gallery.map((src, i) => (
-                <div
+              {images.slice(1).map((src, i) => (
+                <button
                   key={src}
-                  className="relative aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-stone-50"
+                  type="button"
+                  onClick={() => setInspectIndex(i + 1)}
+                  aria-label={`فحص صورة ${i + 2} بحجم كبير`}
+                  className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-stone-100 focus-visible:ring-2 focus-visible:ring-brand"
                 >
-                  <Image
+                  <img
                     src={src}
                     alt={`${product.name} — صورة ${i + 2}`}
-                    fill
-                    className="object-cover hover:scale-105 transition-transform duration-300"
-                    sizes="(max-width: 768px) 50vw, 33vw"
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
-                </div>
+                  <span className="absolute bottom-2 end-2 bg-stone-950/85 text-brand rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </span>
+                </button>
               ))}
+              {product.videoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setInspectIndex(images.length)}
+                  aria-label="شوف فيديو المنتج"
+                  className="group relative aspect-square rounded-2xl overflow-hidden border-2 border-brand/60 bg-stone-950 flex flex-col items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <span className="bg-brand rounded-full p-3 group-hover:scale-110 transition-transform">
+                    <Play className="h-6 w-6 text-stone-950 fill-stone-950" />
+                  </span>
+                  <span className="text-white font-bold text-sm">فيديو المنتج</span>
+                </button>
+              )}
             </div>
           </section>
         )}
       </main>
 
       {/* ── 8. Footer ─────────────────────────────────── */}
-      <footer className="border-t border-stone-100 py-6">
-        <div className="max-w-5xl mx-auto px-4 text-center space-y-2">
-          <p className="text-stone-600 text-sm">
+      <footer className="bg-stone-950 border-t border-stone-800 py-8">
+        <div className="max-w-5xl mx-auto px-4 text-center space-y-3">
+          <span className="inline-flex bg-stone-900 rounded-xl px-2 py-1.5">
+            <Image src="/logo.png" alt="ShoeSpot" width={96} height={66} className="h-8 w-auto" />
+          </span>
+          <p className="text-stone-400 text-sm">
             © 2026 ShoeSpot — الدفع عند الاستلام فجميع المغرب
           </p>
           <Link
             href="/login"
-            className="text-stone-400 text-xs hover:text-stone-500 transition-colors"
+            className="text-stone-500 text-xs hover:text-brand transition-colors"
           >
             دخول المسؤول
           </Link>
@@ -690,9 +729,7 @@ export function LandingClient({ product }: LandingClientProps) {
             {hasOffer ? (
               <>
                 <span className="text-sm font-bold text-stone-900">
-                  <span className="text-emerald-600 ltr-num">
-                    {Math.round(product.offerTotalMad ?? 0)} درهم
-                  </span>{" "}
+                  <span className="ltr-num">{Math.round(product.offerTotalMad ?? 0)} درهم</span>{" "}
                   {product.offerQty === 2 ? "للزوج" : `لـ${product.offerQty}`}
                 </span>
                 <span className="text-xs text-stone-400 ltr-num">
@@ -700,7 +737,7 @@ export function LandingClient({ product }: LandingClientProps) {
                 </span>
               </>
             ) : (
-              <span className="text-xl font-extrabold text-emerald-600 ltr-num">
+              <span className="text-xl font-extrabold text-stone-950 ltr-num">
                 {Math.round(product.priceMad)} درهم
               </span>
             )}
