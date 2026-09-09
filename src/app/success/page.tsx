@@ -3,7 +3,7 @@ import { CheckCircle2, MessageCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "تم تسجيل طلبك — StyleKicks",
+  title: "تم تسجيل طلبك — ShoeSpot",
 };
 
 interface SuccessPageProps {

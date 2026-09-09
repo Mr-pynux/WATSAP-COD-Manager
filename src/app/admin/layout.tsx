@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/admin-shell";
 
 export const metadata: Metadata = {
-  title: "لوحة التحكم — StyleKicks",
+  title: "لوحة التحكم — ShoeSpot",
   robots: { index: false, follow: false },
 };
 

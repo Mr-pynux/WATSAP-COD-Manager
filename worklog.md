@@ -73,3 +73,21 @@ Work Log:
 Stage Summary:
 - Full app verified end-to-end via browser. Deliverables: running app (preview panel), AGENTS.md, supabase/migrations (production path), README.md, worklog.
 - Demo creds: admin@shop.ma / admin123. Seller WhatsApp env: NEXT_PUBLIC_SELLER_WHATSAPP.
+
+---
+Task ID: 7
+Agent: Super Z (main)
+Task: ShoeSpot customization (brand + pricing + offer + logo + seller WhatsApp)
+
+Work Log:
+- Logo: cropped uploaded PNG (transparent) → public/logo.png + src/app/icon.png (favicon, dark rounded bg); VLM described wordmark "SHOES SPOT" yellow/white/black
+- Branding: StyleKicks → ShoeSpot in layout/login/admin/success/footer/metadata/README/AGENTS; logo in landing header + admin sidebar (dark chip)
+- Pricing: Product.offerQty/offerTotalMad (2 for 220) + Order.discountMad (schema pushed); new src/lib/pricing.ts (orderDiscount/orderTotal); updated serialize, whatsapp {total}, export CSV, finance, kpis, POST /api/orders; landing hero badge "عرض خاص: زوج بـ220 درهم", qty hint, summary strikethrough + "وفّرت 80 درهم", sticky CTA "220 للزوج / الوحدة 150"
+- Free delivery: benefits/trust strip/hero text updated
+- .env: NEXT_PUBLIC_SELLER_WHATSAPP=212696910965
+- Seed: price 150 / cost 85 / offer 2×220; qty-2 orders get discount 80 (total 220); re-seeded (17 orders)
+- Dev server restart needed for Prisma client pickup — backgrounded launches die between tool calls; SOLVED by re-running init-fullstack.sh (skips extraction when dev.sh exists, relaunches dev server in surviving fashion)
+- Verified: /api/products returns offer; E2E order qty2 → ORD-18 total 220; WhatsApp message "💰 220 درهم"; success link wa.me/212696910965; mobile sticky CTA + logo, no overflow; lint clean
+
+Stage Summary:
+- App fully rebranded ShoeSpot with real pricing (150 / pair 220 / free delivery), user's logo and WhatsApp number. All flows re-verified end-to-end.

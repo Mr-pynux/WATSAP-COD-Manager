@@ -1,0 +1,677 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useState } from "react";
+     4→import Image from "next/image";
+     5→import Link from "next/link";
+     6→import { useRouter } from "next/navigation";
+     7→import { useForm } from "react-hook-form";
+     8→import { z } from "zod";
+     9→import { zodResolver } from "@hookform/resolvers/zod";
+    10→import { useTheme } from "next-themes";
+    11→import { toast } from "sonner";
+    12→import { motion } from "framer-motion";
+    13→import {
+    14→  Banknote,
+    15→  Truck,
+    16→  RefreshCw,
+    17→  Star,
+    18→  CheckCircle2,
+    19→  XCircle,
+    20→  Minus,
+    21→  Plus,
+    22→  Ruler,
+    23→  Loader2,
+    24→  ShieldCheck,
+    25→  ArrowDown,
+    26→  ShoppingBag,
+    27→  BadgePercent,
+    28→} from "lucide-react";
+    29→
+    30→import { Button } from "@/components/ui/button";
+    31→import { Card, CardContent } from "@/components/ui/card";
+    32→import { Badge } from "@/components/ui/badge";
+    33→import {
+    34→  Dialog,
+    35→  DialogContent,
+    36→  DialogDescription,
+    37→  DialogHeader,
+    38→  DialogTitle,
+    39→  DialogTrigger,
+    40→} from "@/components/ui/dialog";
+    41→import {
+    42→  Select,
+    43→  SelectContent,
+    44→  SelectItem,
+    45→  SelectTrigger,
+    46→  SelectValue,
+    47→} from "@/components/ui/select";
+    48→import { Input } from "@/components/ui/input";
+    49→import { Label } from "@/components/ui/label";
+    50→import { MOROCCAN_CITIES } from "@/lib/constants";
+    51→import { MA_PHONE_REGEX } from "@/lib/phone";
+    52→import type { ProductDTO } from "@/lib/types";
+    53→import { cn } from "@/lib/utils";
+    54→
+    55→const SIZE_CHART: { eu: string; cm: string }[] = [
+    56→  { eu: "39", cm: "24.5" },
+    57→  { eu: "40", cm: "25.0" },
+    58→  { eu: "41", cm: "25.7" },
+    59→  { eu: "42", cm: "26.0" },
+    60→  { eu: "43", cm: "26.7" },
+    61→  { eu: "44", cm: "27.3" },
+    62→  { eu: "45", cm: "28.0" },
+    63→];
+    64→
+    65→const formSchema = z.object({
+    66→  name: z.string().trim().min(3, "الاسم قصير — كتب الاسم الكامل"),
+    67→  phone: z
+    68→    .string()
+    69→    .trim()
+    70→    .refine((v) => MA_PHONE_REGEX.test(v), "رقم الهاتف خاصو يكون 06 ولا 07 + 8 أرقام"),
+    71→  city: z.string().min(1, "اختر المدينة"),
+    72→  district: z.string().optional(),
+    73→  landmark: z.string().optional(),
+    74→});
+    75→
+    76→type FormData = z.infer<typeof formSchema>;
+    77→
+    78→interface LandingClientProps {
+    79→  product: ProductDTO;
+    80→}
+    81→
+    82→export function LandingClient({ product }: LandingClientProps) {
+    83→  const router = useRouter();
+    84→  const { setTheme } = useTheme();
+    85→  const [color, setColor] = useState<string>(product.colors[0]?.name ?? "");
+    86→  const [size, setSize] = useState<string>("");
+    87→  const [quantity, setQuantity] = useState<number>(1);
+    88→  const [submitting, setSubmitting] = useState(false);
+    89→  const [sizeTouched, setSizeTouched] = useState(false);
+    90→
+    91→  // Landing page is always light
+    92→  useEffect(() => {
+    93→    setTheme("light");
+    94→  }, [setTheme]);
+    95→
+    96→  const {
+    97→    register,
+    98→    handleSubmit,
+    99→    watch,
+   100→    setValue,
+   101→    formState: { errors },
+   102→  } = useForm<FormData>({
+   103→    resolver: zodResolver(formSchema),
+   104→    defaultValues: { name: "", phone: "", city: "", district: "", landmark: "" },
+   105→  });
+   106→
+   107→  const phoneValue = watch("phone") ?? "";
+   108→  const phoneState = useMemo(() => {
+   109→    if (!phoneValue) return "empty" as const;
+   110→    return MA_PHONE_REGEX.test(phoneValue) ? ("valid" as const) : ("invalid" as const);
+   111→  }, [phoneValue]);
+   112→
+   113→  const images = product.imageUrls.length ? product.imageUrls : [];
+   114→  const heroImage = images[0] ?? "";
+   115→  const gallery = images.slice(1, 6);
+   116→  const total = product.priceMad * quantity;
+   117→  const discount = product.oldPriceMad
+   118→    ? Math.round((1 - product.priceMad / product.oldPriceMad) * 100)
+   119→    : 0;
+   120→
+   121→  function scrollToForm() {
+   122→    document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" });
+   123→  }
+   124→
+   125→  async function onSubmit(values: FormData) {
+   126→    if (!size) {
+   127→      setSizeTouched(true);
+   128→      toast.error("اختر المقاس أولا");
+   129→      return;
+   130→    }
+   131→    setSubmitting(true);
+   132→    try {
+   133→      const res = await fetch("/api/orders", {
+   134→        method: "POST",
+   135→        headers: { "Content-Type": "application/json" },
+   136→        body: JSON.stringify({
+   137→          productId: product.id || undefined,
+   138→          name: values.name,
+   139→          phone: values.phone,
+   140→          city: values.city,
+   141→          district: values.district || null,
+   142→          landmark: values.landmark || null,
+   143→          size,
+   144→          color: color || null,
+   145→          quantity,
+   146→        }),
+   147→      });
+   148→      const data = (await res.json()) as { orderNumber?: number; error?: string };
+   149→      if (!res.ok || !data.orderNumber) {
+   150→        toast.error(data.error || "وقع مشكل، عاود المحاولة");
+   151→        return;
+   152→      }
+   153→      // Meta Pixel purchase event (only injected when pixel id is set)
+   154→      const w = window as unknown as { fbq?: (...args: unknown[]) => void };
+   155→      w.fbq?.("track", "Purchase", { value: total, currency: "MAD" });
+   156→      router.push(`/success?n=${data.orderNumber}`);
+   157→    } catch {
+   158→      toast.error("تعذر الاتصال بالسيرفر، تحقق من الأنترنيت");
+   159→    } finally {
+   160→      setSubmitting(false);
+   161→    }
+   162→  }
+   163→
+   164→  const selectedColorHex = product.colors.find((c) => c.name === color)?.hex;
+   165→
+   166→  return (
+   167→    <div className="bg-white text-stone-900 min-h-screen pb-24 md:pb-0">
+   168→      {/* ── 1. Slim header ─────────────────────────────── */}
+   169→      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-stone-100">
+   170→        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+   171→          <div className="flex items-center gap-2">
+   172→            <span className="bg-emerald-600 text-white rounded-lg px-2 py-1 text-lg font-extrabold leading-none">
+   173→              S
+   174→            </span>
+   175→            <span className="font-extrabold text-xl tracking-tight">StyleKicks</span>
+   176→          </div>
+   177→          <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+   178→            <Banknote className="h-3.5 w-3.5" />
+   179→            الدفع عند الاستلام
+   180→          </Badge>
+   181→        </div>
+   182→      </header>
+   183→
+   184→      <main className="max-w-5xl mx-auto px-4">
+   185→        {/* ── 2. Hero ─────────────────────────────────── */}
+   186→        <section className="pt-8 md:pt-14 pb-8 grid md:grid-cols-2 gap-8 items-center">
+   187→          <div className="order-2 md:order-1 space-y-5">
+   188→            <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1 text-sm font-semibold">
+   189→              <Star className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+   190→              4.8 <span className="text-stone-500 font-normal">| +1200 طلب</span>
+   191→            </div>
+   192→
+   193→            <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
+   194→              {product.name}
+   195→            </h1>
+   196→
+   197→            <div className="flex items-center gap-3 flex-wrap">
+   198→              <span className="text-4xl font-extrabold text-emerald-600">
+   199→                {Math.round(product.priceMad)} درهم
+   200→              </span>
+   201→              {product.oldPriceMad && (
+   202→                <>
+   203→                  <span className="text-xl text-stone-400 line-through">
+   204→                    {Math.round(product.oldPriceMad)} درهم
+   205→                  </span>
+   206→                  <Badge className="bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100 text-sm">
+   207→                    <BadgePercent className="h-3.5 w-3.5" />−{discount}%
+   208→                  </Badge>
+   209→                </>
+   210→              )}
+   211→            </div>
+   212→
+   213→            <p className="text-stone-600 text-lg leading-relaxed">
+   214→              سنيكرز خفيف ومريح، صالح للاستعمال اليومي — كتخلص فقط ملي توصلك السلعة
+   215→              لباب دارك.
+   216→            </p>
+   217→
+   218→            <Button
+   219→              size="lg"
+   220→              onClick={scrollToForm}
+   221→              className="w-full md:w-auto h-14 text-lg font-bold gap-2 shadow-lg shadow-emerald-600/20"
+   222→            >
+   223→              <ShoppingBag className="h-5 w-5" />
+   224→              اطلب دابا — الدفع عند الاستلام
+   225→            </Button>
+   226→          </div>
+   227→
+   228→          <div className="order-1 md:order-2">
+   229→            <motion.div
+   230→              initial={{ opacity: 0, scale: 0.96 }}
+   231→              animate={{ opacity: 1, scale: 1 }}
+   232→              transition={{ duration: 0.5 }}
+   233→              className="relative rounded-3xl overflow-hidden border border-stone-200 shadow-xl bg-stone-50"
+   234→            >
+   235→              {heroImage && (
+   236→                <Image
+   237→                  src={heroImage}
+   238→                  alt={`${product.name} — الصورة الرئيسية`}
+   239→                  width={1200}
+   240→                  height={900}
+   241→                  priority
+   242→                  className="w-full h-auto object-cover"
+   243→                  sizes="(max-width: 768px) 100vw, 50vw"
+   244→                />
+   245→              )}
+   246→            </motion.div>
+   247→          </div>
+   248→        </section>
+   249→
+   250→        {/* ── 3. Benefits row ─────────────────────────── */}
+   251→        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6">
+   252→          {[
+   253→            {
+   254→              icon: Banknote,
+   255→              title: "الدفع عند الاستلام",
+   256→              text: "كتخلص فقط ملي توصلك السلعة",
+   257→            },
+   258→            {
+   259→              icon: Truck,
+   260→              title: "توصيل 24-48 ساعة",
+   261→              text: "لجميع المدن المغربية",
+   262→            },
+   263→            {
+   264→              icon: RefreshCw,
+   265→              title: "تبديل مجاني",
+   266→              text: "المقاس ماجاكش؟ نبدلوهولك بلا فلوس",
+   267→            },
+   268→          ].map((b) => (
+   269→            <Card key={b.title} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+   270→              <CardContent className="flex items-center gap-4 p-5">
+   271→                <div className="bg-emerald-50 text-emerald-600 rounded-xl p-3 shrink-0">
+   272→                  <b.icon className="h-6 w-6" />
+   273→                </div>
+   274→                <div>
+   275→                  <p className="font-bold">{b.title}</p>
+   276→                  <p className="text-sm text-stone-500">{b.text}</p>
+   277→                </div>
+   278→              </CardContent>
+   279→            </Card>
+   280→          ))}
+   281→        </section>
+   282→
+   283→        {/* ── 4. Product configurator ─────────────────── */}
+   284→        <section className="py-6">
+   285→          <Card className="border-stone-200 shadow-sm">
+   286→            <CardContent className="p-5 md:p-8 space-y-6">
+   287→              <div className="space-y-3">
+   288→                <p className="font-bold text-lg">
+   289→                  اللون <span className="text-stone-500 font-normal text-sm">({color})</span>
+   290→                </p>
+   291→                <div className="flex gap-3">
+   292→                  {product.colors.map((c) => (
+   293→                    <button
+   294→                      key={c.name}
+   295→                      type="button"
+   296→                      onClick={() => setColor(c.name)}
+   297→                      aria-label={`اختر اللون ${c.name}`}
+   298→                      aria-pressed={color === c.name}
+   299→                      className={cn(
+   300→                        "h-11 w-11 rounded-full border-2 flex items-center justify-center transition-all",
+   301→                        color === c.name
+   302→                          ? "border-emerald-600 ring-2 ring-emerald-200 scale-110"
+   303→                          : "border-stone-200 hover:border-stone-300"
+   304→                      )}
+   305→                      style={{ backgroundColor: c.hex }}
+   306→                    >
+   307→                      {color === c.name && (
+   308→                        <CheckCircle2 className="h-5 w-5 text-emerald-700 mix-blend-difference" />
+   309→                      )}
+   310→                    </button>
+   311→                  ))}
+   312→                </div>
+   313→              </div>
+   314→
+   315→              <div className="space-y-3">
+   316→                <div className="flex items-center justify-between">
+   317→                  <p className="font-bold text-lg">
+   318→                    المقاس{" "}
+   319→                    {sizeTouched && !size && (
+   320→                      <span className="text-rose-600 text-sm font-normal">
+   321→                        — المقاس مطلوب
+   322→                      </span>
+   323→                    )}
+   324→                  </p>
+   325→                  <Dialog>
+   326→                    <DialogTrigger asChild>
+   327→                      <Button variant="outline" size="sm" className="gap-1.5 h-9">
+   328→                        <Ruler className="h-4 w-4" />
+   329→                        جدول المقاسات
+   330→                      </Button>
+   331→                    </DialogTrigger>
+   332→                    <DialogContent className="max-w-sm">
+   333→                      <DialogHeader>
+   334→                        <DialogTitle>جدول المقاسات</DialogTitle>
+   335→                        <DialogDescription>
+   336→                          قيس طول الرجل بسم وختار المقاس المناسب
+   337→                        </DialogDescription>
+   338→                      </DialogHeader>
+   339→                      <table className="w-full text-center border-collapse">
+   340→                        <thead>
+   341→                          <tr className="bg-stone-100">
+   342→                            <th className="p-2 font-bold rounded-r-md">المقاس EU</th>
+   343→                            <th className="p-2 font-bold rounded-l-md">الطول (سم)</th>
+   344→                          </tr>
+   345→                        </thead>
+   346→                        <tbody>
+   347→                          {SIZE_CHART.map((row) => (
+   348→                            <tr key={row.eu} className="border-b border-stone-100">
+   349→                              <td className="p-2 ltr-num font-semibold">{row.eu}</td>
+   350→                              <td className="p-2 ltr-num">{row.cm}</td>
+   351→                            </tr>
+   352→                          ))}
+   353→                        </tbody>
+   354→                      </table>
+   355→                    </DialogContent>
+   356→                  </Dialog>
+   357→                </div>
+   358→                <div className="flex flex-wrap gap-2">
+   359→                  {product.sizes.map((s) => (
+   360→                    <button
+   361→                      key={s}
+   362→                      type="button"
+   363→                      onClick={() => {
+   364→                        setSize(s);
+   365→                        setSizeTouched(true);
+   366→                      }}
+   367→                      aria-label={`اختر المقاس ${s}`}
+   368→                      aria-pressed={size === s}
+   369→                      className={cn(
+   370→                        "h-11 min-w-11 px-3 rounded-xl border-2 font-bold text-base transition-all",
+   371→                        size === s
+   372→                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+   373→                          : "border-stone-200 text-stone-700 hover:border-stone-300"
+   374→                      )}
+   375→                    >
+   376→                      <span className="ltr-num">{s}</span>
+   377→                    </button>
+   378→                  ))}
+   379→                </div>
+   380→              </div>
+   381→
+   382→              <div className="space-y-3">
+   383→                <p className="font-bold text-lg">الكمية</p>
+   384→                <div className="flex items-center gap-3">
+   385→                  <button
+   386→                    type="button"
+   387→                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+   388→                    aria-label="نقص الكمية"
+   389→                    className="h-11 w-11 rounded-xl border-2 border-stone-200 flex items-center justify-center hover:border-stone-300"
+   390→                  >
+   391→                    <Minus className="h-4 w-4" />
+   392→                  </button>
+   393→                  <span className="ltr-num text-xl font-bold w-8 text-center">
+   394→                    {quantity}
+   395→                  </span>
+   396→                  <button
+   397→                    type="button"
+   398→                    onClick={() => setQuantity((q) => Math.min(3, q + 1))}
+   399→                    aria-label="زد الكمية"
+   400→                    className="h-11 w-11 rounded-xl border-2 border-stone-200 flex items-center justify-center hover:border-stone-300"
+   401→                  >
+   402→                    <Plus className="h-4 w-4" />
+   403→                  </button>
+   404→                  <span className="text-sm text-stone-500">
+   405→                    (الحد الأقصى 3 فالطلب الواحد)
+   406→                  </span>
+   407→                </div>
+   408→              </div>
+   409→
+   410→              <Button
+   411→                size="lg"
+   412→                onClick={scrollToForm}
+   413→                variant="secondary"
+   414→                className="w-full h-12 font-bold gap-2"
+   415→              >
+   416→                كمّل الطلب
+   417→                <ArrowDown className="h-4 w-4" />
+   418→              </Button>
+   419→            </CardContent>
+   420→          </Card>
+   421→        </section>
+   422→
+   423→        {/* ── 5. Order form ───────────────────────────── */}
+   424→        <section id="order-form" className="py-6 scroll-mt-20">
+   425→          <Card className="border-2 border-emerald-100 shadow-lg shadow-emerald-600/5">
+   426→            <CardContent className="p-5 md:p-8 space-y-6">
+   427→              <div className="flex items-center gap-3">
+   428→                <div className="bg-emerald-600 text-white rounded-full p-2">
+   429→                  <Banknote className="h-5 w-5" />
+   430→                </div>
+   431→                <div>
+   432→                  <h2 className="text-2xl font-extrabold">أكد الطلب ديالك</h2>
+   433→                  <p className="text-stone-500 text-sm">
+   434→                    عمّر المعلومات وغانعيطو ليك للتأكيد قبل الإرسال
+   435→                  </p>
+   436→                </div>
+   437→              </div>
+   438→
+   439→              {/* live order summary */}
+   440→              <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm space-y-1.5">
+   441→                <p className="font-bold text-base mb-2">ملخص الطلب</p>
+   442→                <div className="flex justify-between">
+   443→                  <span className="text-stone-500">المنتج</span>
+   444→                  <span className="font-semibold">{product.name}</span>
+   445→                </div>
+   446→                <div className="flex justify-between">
+   447→                  <span className="text-stone-500">المقاس</span>
+   448→                  <span className="font-semibold ltr-num">{size || "—"}</span>
+   449→                </div>
+   450→                <div className="flex justify-between">
+   451→                  <span className="text-stone-500">اللون</span>
+   452→                  <span className="font-semibold">
+   453→                    {color || "—"}
+   454→                    {selectedColorHex && (
+   455→                      <span
+   456→                        className="inline-block h-3.5 w-3.5 rounded-full border border-stone-300 ms-2 align-middle"
+   457→                        style={{ backgroundColor: selectedColorHex }}
+   458→                        aria-hidden="true"
+   459→                      />
+   460→                    )}
+   461→                  </span>
+   462→                </div>
+   463→                <div className="flex justify-between">
+   464→                  <span className="text-stone-500">الكمية</span>
+   465→                  <span className="font-semibold ltr-num">{quantity}</span>
+   466→                </div>
+   467→                <div className="flex justify-between border-t border-stone-200 pt-2 mt-2 text-base">
+   468→                  <span className="font-bold">المجموع</span>
+   469→                  <span className="font-extrabold text-emerald-600 ltr-num">
+   470→                    {Math.round(total)} درهم
+   471→                  </span>
+   472→                </div>
+   473→              </div>
+   474→
+   475→              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+   476→                <div className="grid sm:grid-cols-2 gap-5">
+   477→                  <div className="space-y-2">
+   478→                    <Label htmlFor="name">الاسم الكامل *</Label>
+   479→                    <Input
+   480→                      id="name"
+   481→                      placeholder="مثلا: يوسف العلمي"
+   482→                      autoComplete="name"
+   483→                      className="h-12"
+   484→                      aria-invalid={!!errors.name}
+   485→                      {...register("name")}
+   486→                    />
+   487→                    {errors.name && (
+   488→                      <p className="text-sm text-rose-600">{errors.name.message}</p>
+   489→                    )}
+   490→                  </div>
+   491→
+   492→                  <div className="space-y-2">
+   493→                    <Label htmlFor="phone">رقم الهاتف *</Label>
+   494→                    <div className="relative">
+   495→                      <Input
+   496→                        id="phone"
+   497→                        inputMode="numeric"
+   498→                        autoComplete="tel"
+   499→                        placeholder="06XXXXXXXX"
+   500→                        dir="ltr"
+   501→                        className={cn(
+   502→                          "h-12 text-left ltr-num",
+   503→                          phoneState === "valid" && "border-emerald-500 focus-visible:ring-emerald-500/30",
+   504→                          phoneState === "invalid" && "border-rose-400 focus-visible:ring-rose-500/30"
+   505→                        )}
+   506→                        aria-invalid={!!errors.phone || phoneState === "invalid"}
+   507→                        {...register("phone")}
+   508→                      />
+   509→                      {phoneState === "valid" && (
+   510→                        <CheckCircle2 className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+   511→                      )}
+   512→                      {phoneState === "invalid" && (
+   513→                        <XCircle className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-rose-500" />
+   514→                      )}
+   515→                    </div>
+   516→                    {phoneState === "invalid" && !errors.phone && (
+   517→                      <p className="text-sm text-rose-600">
+   518→                        {phoneValue.startsWith("0") || phoneValue.length < 10
+   519→                          ? "رقم ناقص — خاصو يكون 06 ولا 07 + 8 أرقام"
+   520→                          : "رقم غير صحيح — تحقق منو"}
+   521→                      </p>
+   522→                    )}
+   523→                    {errors.phone && (
+   524→                      <p className="text-sm text-rose-600">{errors.phone.message}</p>
+   525→                    )}
+   526→                  </div>
+   527→
+   528→                  <div className="space-y-2">
+   529→                    <Label htmlFor="city">المدينة *</Label>
+   530→                    <Select
+   531→                      value={watch("city")}
+   532→                      onValueChange={(v) => setValue("city", v, { shouldValidate: true })}
+   533→                    >
+   534→                      <SelectTrigger id="city" className="h-12">
+   535→                        <SelectValue placeholder="اختر المدينة" />
+   536→                      </SelectTrigger>
+   537→                      <SelectContent className="max-h-72">
+   538→                        {MOROCCAN_CITIES.map((city) => (
+   539→                          <SelectItem key={city} value={city}>
+   540→                            {city}
+   541→                          </SelectItem>
+   542→                        ))}
+   543→                      </SelectContent>
+   544→                    </Select>
+   545→                    {errors.city && (
+   546→                      <p className="text-sm text-rose-600">{errors.city.message}</p>
+   547→                    )}
+   548→                  </div>
+   549→
+   550→                  <div className="space-y-2">
+   551→                    <Label htmlFor="district">الحي (اختياري)</Label>
+   552→                    <Input
+   553→                      id="district"
+   554→                      placeholder="مثلا: حي المعاريف"
+   555→                      className="h-12"
+   556→                      {...register("district")}
+   557→                    />
+   558→                  </div>
+   559→
+   560→                  <div className="space-y-2 sm:col-span-2">
+   561→                    <Label htmlFor="landmark">نقطة دالة قريبة (اختياري)</Label>
+   562→                    <Input
+   563→                      id="landmark"
+   564→                      placeholder="مثلا: قرب جامع، فرمة، مدرسة..."
+   565→                      className="h-12"
+   566→                      {...register("landmark")}
+   567→                    />
+   568→                  </div>
+   569→                </div>
+   570→
+   571→                <Button
+   572→                  type="submit"
+   573→                  size="lg"
+   574→                  disabled={submitting}
+   575→                  className="w-full h-14 text-lg font-extrabold gap-2 shadow-lg shadow-emerald-600/25"
+   576→                >
+   577→                  {submitting ? (
+   578→                    <>
+   579→                      <Loader2 className="h-5 w-5 animate-spin" />
+   580→                      كنسجلو الطلب...
+   581→                    </>
+   582→                  ) : (
+   583→                    <>
+   584→                      <ShieldCheck className="h-5 w-5" />
+   585→                      أكد الطلب — {Math.round(total)} درهم عند الاستلام
+   586→                    </>
+   587→                  )}
+   588→                </Button>
+   589→              </form>
+   590→            </CardContent>
+   591→          </Card>
+   592→        </section>
+   593→
+   594→        {/* ── 6. Trust strip ──────────────────────────── */}
+   595→        <section className="py-6">
+   596→          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 border border-stone-200 rounded-2xl p-4">
+   597→            {[
+   598→              { icon: Banknote, text: "الدفع عند الاستلام" },
+   599→              { icon: RefreshCw, text: "تبديل مجاني للمقاس" },
+   600→              { icon: Truck, text: "توصيل سريع 24-48 ساعة" },
+   601→            ].map((t) => (
+   602→              <div key={t.text} className="flex items-center justify-center gap-2 py-2">
+   603→                <t.icon className="h-5 w-5 text-emerald-600" />
+   604→                <span className="font-semibold text-stone-700">{t.text}</span>
+   605→              </div>
+   606→            ))}
+   607→          </div>
+   608→        </section>
+   609→
+   610→        {/* ── 7. Gallery ──────────────────────────────── */}
+   611→        {gallery.length > 0 && (
+   612→          <section className="py-6 pb-10">
+   613→            <h2 className="text-2xl font-extrabold mb-4">صور المنتج</h2>
+   614→            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+   615→              {gallery.map((src, i) => (
+   616→                <div
+   617→                  key={src}
+   618→                  className="relative aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-stone-50"
+   619→                >
+   620→                  <Image
+   621→                    src={src}
+   622→                    alt={`${product.name} — صورة ${i + 2}`}
+   623→                    fill
+   624→                    className="object-cover hover:scale-105 transition-transform duration-300"
+   625→                    sizes="(max-width: 768px) 50vw, 33vw"
+   626→                  />
+   627→                </div>
+   628→              ))}
+   629→            </div>
+   630→          </section>
+   631→        )}
+   632→      </main>
+   633→
+   634→      {/* ── 8. Footer ─────────────────────────────────── */}
+   635→      <footer className="border-t border-stone-100 py-6">
+   636→        <div className="max-w-5xl mx-auto px-4 text-center space-y-2">
+   637→          <p className="text-stone-600 text-sm">
+   638→            © 2026 StyleKicks — الدفع عند الاستلام فجميع المغرب
+   639→          </p>
+   640→          <Link
+   641→            href="/login"
+   642→            className="text-stone-400 text-xs hover:text-stone-500 transition-colors"
+   643→          >
+   644→            دخول المسؤول
+   645→          </Link>
+   646→        </div>
+   647→      </footer>
+   648→
+   649→      {/* ── 9. Sticky mobile CTA ──────────────────────── */}
+   650→      <div
+   651→        className="fixed bottom-0 inset-x-0 z-40 md:hidden bg-white border-t border-stone-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+   652→        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+   653→      >
+   654→        <div className="flex items-center justify-between gap-3 px-4 py-3">
+   655→          <div className="flex flex-col">
+   656→            <span className="text-xl font-extrabold text-emerald-600 ltr-num">
+   657→              {Math.round(product.priceMad)} درهم
+   658→            </span>
+   659→            {product.oldPriceMad && (
+   660→              <span className="text-xs text-stone-400 line-through ltr-num">
+   661→                {Math.round(product.oldPriceMad)} درهم
+   662→              </span>
+   663→            )}
+   664→          </div>
+   665→          <Button
+   666→            onClick={scrollToForm}
+   667→            className="h-12 px-6 text-base font-bold flex-1 max-w-64"
+   668→          >
+   669→            <ShoppingBag className="h-5 w-5" />
+   670→            اطلب دابا
+   671→          </Button>
+   672→        </div>
+   673→      </div>
+   674→    </div>
+   675→  );
+   676→}
+   677→

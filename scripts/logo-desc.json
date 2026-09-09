@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "- **Text/Wordmark:** \"SHOES SPOT\" (with \"SHOES\" in a white, speckled, rounded font above \"SPOT\" in a bold, yellow, brushstroke-style font).\n- **Main Colors:** Bright yellow (for \"SPOT,\" the sneaker graphic, and the underline) and white (for \"SHOES\"), with black outlines/details.\n- **Background & Style:** Plain white background; dynamic, hand-drawn/illustrated style featuring a sneaker with motion lines, conveying energy and casual sportiness.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1788967562,
+  "id": "2026090923255894fc94a717ad4c37",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026090923255894fc94a717ad4c37",
+  "usage": {
+    "completion_tokens": 118,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1187,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1305
+  }
+}

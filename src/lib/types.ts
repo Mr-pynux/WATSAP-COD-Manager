@@ -11,6 +11,8 @@ export interface ProductDTO {
   imageUrls: string[];
   priceMad: number;
   oldPriceMad: number | null;
+  offerQty: number | null;
+  offerTotalMad: number | null;
   costMad: number;
   sizes: string[];
   colors: ProductColor[];
@@ -43,6 +45,7 @@ export interface OrderDTO {
   color: string | null;
   quantity: number;
   unitPriceMad: number;
+  discountMad: number;
   totalMad: number;
   status: string;
   attempts: number;

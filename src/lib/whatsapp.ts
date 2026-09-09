@@ -35,9 +35,14 @@ export function render(body: string, vars: TemplateVars): string {
   );
 }
 
-/** Total (MAD) as an integer string for messages. */
-export function formatTotal(quantity: number, unitPriceMad: number): string {
-  return String(Math.round(quantity * unitPriceMad));
+/** Total (MAD) as an integer string for messages (after offer discount). */
+export function formatTotal(
+  quantity: number,
+  unitPriceMad: number,
+  discountMad?: number | null
+): string {
+  const total = Math.max(0, Math.round(quantity * unitPriceMad - (discountMad ?? 0)));
+  return String(total);
 }
 
 /** is "tomorrow" relative to today (ignoring time-of-day, local server time). */

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { orderTotal } from "@/lib/pricing";
 import { requireAdmin, unauthorized } from "@/lib/auth";
 import { toOrderDTO } from "@/lib/serialize";
 import type { KpisResponse } from "@/lib/types";
@@ -76,7 +77,10 @@ export async function GET() {
 
   // ── money ──
   const adSpend30d = adSpend30Agg._sum.amountMad ?? 0;
-  const revenue30d = delivered30.reduce((s, o) => s + o.quantity * o.unitPriceMad, 0);
+  const revenue30d = delivered30.reduce(
+    (s, o) => s + orderTotal(o.quantity, o.unitPriceMad, o.discountMad),
+    0
+  );
   const productCost30d = delivered30.reduce((s, o) => s + o.product.costMad * o.quantity, 0);
   const courierFees30d =
     delivered30.reduce((s, o) => s + (o.courier?.feePerDeliveryMad ?? 0), 0) +

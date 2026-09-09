@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { parseJsonArray } from "@/lib/serialize";
+import { toProductDTO } from "@/lib/serialize";
 import { LandingClient } from "@/components/public/landing-client";
 import { MetaPixel } from "@/components/meta-pixel";
 import type { ProductDTO } from "@/lib/types";
@@ -20,9 +20,11 @@ const FALLBACK: ProductDTO = {
   id: "",
   name: "حذاء رياضي Urban Step",
   imageUrls: FALLBACK_IMAGES,
-  priceMad: 249,
-  oldPriceMad: 399,
-  costMad: 140,
+  priceMad: 150,
+  oldPriceMad: null,
+  offerQty: 2,
+  offerTotalMad: 220,
+  costMad: 85,
   sizes: ["39", "40", "41", "42", "43", "44", "45"],
   colors: [
     { name: "أبيض", hex: "#f5f5f4" },
@@ -33,17 +35,7 @@ const FALLBACK: ProductDTO = {
 };
 
 function toDto(p: Product): ProductDTO {
-  return {
-    id: p.id,
-    name: p.name,
-    imageUrls: parseJsonArray<string>(p.imageUrls),
-    priceMad: p.priceMad,
-    oldPriceMad: p.oldPriceMad ?? null,
-    costMad: p.costMad,
-    sizes: parseJsonArray<string>(p.sizes),
-    colors: parseJsonArray<{ name: string; hex: string }>(p.colors),
-    active: p.active,
-  };
+  return toProductDTO(p);
 }
 
 export default async function Home() {

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdmin, unauthorized } from "@/lib/auth";
 import { normalizeMaPhone } from "@/lib/phone";
 import { toOrderDTO, parseJsonArray } from "@/lib/serialize";
+import { orderDiscount } from "@/lib/pricing";
 import { parseOrdersFilters, buildOrdersWhere, PAGE_SIZE } from "@/lib/orders-query";
 import { MOROCCAN_CITIES } from "@/lib/constants";
 import type { OrdersResponse } from "@/lib/types";
@@ -126,6 +127,11 @@ export async function POST(req: Request) {
       color: data.color || null,
       quantity: data.quantity,
       unitPriceMad: product.priceMad,
+      discountMad: orderDiscount(data.quantity, {
+        priceMad: product.priceMad,
+        offerQty: product.offerQty,
+        offerTotalMad: product.offerTotalMad,
+      }),
       status: "new",
       notes,
     },

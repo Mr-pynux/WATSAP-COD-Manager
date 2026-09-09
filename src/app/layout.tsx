@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "StyleKicks — الدفع عند الاستلام",
+  title: "ShoeSpot — الدفع عند الاستلام",
   description:
     "ستاييل كيكس — حذاء رياضي Urban Step بالدفع عند الاستلام، توصيل 24-48 ساعة لجميع المدن المغربية، وتبديل مجاني للمقاس.",
   icons: {

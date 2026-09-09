@@ -63,7 +63,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center space-y-1">
           <CardTitle className="text-2xl font-bold">دخول المسؤول</CardTitle>
-          <CardDescription>لوحة تحكم StyleKicks</CardDescription>
+          <CardDescription>لوحة تحكم ShoeSpot</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>

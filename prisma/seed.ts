@@ -128,7 +128,7 @@ const ORDERS: SeedOrder[] = [
     courierName: "Ozone", confirmedAt: daysAgo(9, 15), shippedAt: daysAgo(7), deliveredAt: daysAgo(5),
   },
   {
-    name: "نادية الشرقاوي", phone: "0663456706", city: "أكادير", size: "38", color: "بيج",
+    name: "نادية الشرقاوي", phone: "0663456706", city: "أكادير", size: "39", color: "بيج",
     quantity: 1, status: "delivered", notes: "الزبونة طابت الجلسة معاها",
     createdAt: daysAgo(6), attempts: 0, confirmedAt: daysAgo(6, 14),
     courierName: "أمانة", shippedAt: daysAgo(4), deliveredAt: daysAgo(2),
@@ -198,11 +198,18 @@ const ORDERS: SeedOrder[] = [
   },
   {
     name: "أنس الحسني", phone: "0770012316", city: "الدار البيضاء", district: "حي سيدي معروف",
-    size: "44", color: "أسود", quantity: 1, status: "new", attempts: 0, createdAt: hoursAgo(1),
+    size: "44", color: "أسود", quantity: 2, status: "new", attempts: 0, createdAt: hoursAgo(1),
   },
 ];
 
 const AD_SPENDS = [120, 150, 200, 80, 250, 180, 90, 160, 220, 140, 110, 130, 170, 100];
+
+// pricing: unit 150 MAD, pair offer 220 MAD (discount 80 per complete pair)
+const UNIT_PRICE = 150;
+const OFFER_QTY = 2;
+const OFFER_TOTAL = 220;
+const discountFor = (q: number) =>
+  Math.floor(q / OFFER_QTY) * (OFFER_QTY * UNIT_PRICE - OFFER_TOTAL);
 
 async function main() {
   console.log("🌱 Seeding…");
@@ -219,9 +226,11 @@ async function main() {
   const product = await prisma.product.create({
     data: {
       name: "حذاء رياضي Urban Step",
-      priceMad: 249,
-      oldPriceMad: 399,
-      costMad: 140,
+      priceMad: UNIT_PRICE,
+      oldPriceMad: null,
+      offerQty: OFFER_QTY,
+      offerTotalMad: OFFER_TOTAL,
+      costMad: 85,
       sizes: JSON.stringify(["39", "40", "41", "42", "43", "44", "45"]),
       colors: JSON.stringify([
         { name: "أبيض", hex: "#f5f5f4" },
@@ -265,7 +274,8 @@ async function main() {
         size: o.size,
         color: o.color,
         quantity: o.quantity,
-        unitPriceMad: 249,
+        unitPriceMad: UNIT_PRICE,
+        discountMad: discountFor(o.quantity),
         status: o.status,
         attempts: o.attempts,
         lastAttemptAt: o.lastAttemptAt,

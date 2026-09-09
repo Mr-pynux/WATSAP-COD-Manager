@@ -13,6 +13,8 @@ model Product {
   imageUrls   String // JSON array
   priceMad    Float
   oldPriceMad Float?
+  offerQty    Int? // bundle offer size, e.g. 2 = pair
+  offerTotalMad Float? // bundle total, e.g. 220 for the pair
   costMad     Float    @default(0)
   sizes       String // JSON array ["39".."45"]
   colors      String // JSON array [{name,hex}]
@@ -35,6 +37,7 @@ model Order {
   color         String?
   quantity      Int           @default(1)
   unitPriceMad  Float
+  discountMad   Float        @default(0) // bundle offer discount (e.g. pair at 220)
   status        String        @default("new")
   attempts      Int           @default(0)
   lastAttemptAt DateTime?

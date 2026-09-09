@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     size: order.size,
     color: order.color ?? undefined,
     quantity: order.quantity,
-    total: formatTotal(order.quantity, order.unitPriceMad),
+    total: formatTotal(order.quantity, order.unitPriceMad, order.discountMad),
     city: order.city,
     tracking: order.tracking ?? undefined,
   });

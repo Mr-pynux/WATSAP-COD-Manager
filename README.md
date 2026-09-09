@@ -1,4 +1,4 @@
-# COD Order Manager — StyleKicks
+# COD Order Manager — ShoeSpot
 
 لوحة تحكم للبائع المغربي (الدفع عند الاستلام): صفحة هبوط عربية RTL مع فورم الطلب → لوحة إدارة كاملة (تأكيد عبر واتساب، حالات، متابعة، بلاك ليست، ناقلين، مالية/P&L، تصدير CSV).
 
@@ -63,3 +63,9 @@ admin@shop.ma / admin123
 - `bun run lint` — نظيف (0 errors)
 - كل الصفحات ترجع 200 (و /admin بدون جلسة → 307 → /login)
 - تدفق API مُختبر بـ curl: login → orders → whatsapp (تزايد المحاولات + no_answer→retry + event) → PATCH (timestamps + event + بلاك ليست أوتوماتيكية) → CSV → bulk → templates/finance/couriers/blacklist
+
+## ShoeSpot customization (v1.1)
+- Store: **ShoeSpot** — logo at `public/logo.png` (favicon auto from `src/app/icon.png`)
+- Pricing: unit **150 MAD**; pair offer **2 for 220 MAD** (Product.offerQty/offerTotalMad; per-order `discountMad`)
+- Free delivery messaging on the landing
+- Seller WhatsApp: `NEXT_PUBLIC_SELLER_WHATSAPP=212696910965`

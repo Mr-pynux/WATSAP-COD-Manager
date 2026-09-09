@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { orderTotal } from "@/lib/pricing";
 import { requireAdmin, unauthorized } from "@/lib/auth";
 import { buildOrdersCsv, csvFilename } from "@/lib/csv";
 import { parseOrdersFilters, buildOrdersWhere } from "@/lib/orders-query";
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
       size: o.size,
       color: o.color,
       quantity: o.quantity,
-      totalMad: o.quantity * o.unitPriceMad,
+      totalMad: orderTotal(o.quantity, o.unitPriceMad, o.discountMad),
       notes: o.notes,
       statusLabel: STATUS_LABELS[o.status as OrderStatus] ?? o.status,
       createdAt: o.createdAt,

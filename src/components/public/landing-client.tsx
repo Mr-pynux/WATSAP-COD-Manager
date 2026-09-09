@@ -49,6 +49,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MOROCCAN_CITIES } from "@/lib/constants";
 import { MA_PHONE_REGEX } from "@/lib/phone";
+import { orderDiscount, orderTotal } from "@/lib/pricing";
 import type { ProductDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -113,8 +114,11 @@ export function LandingClient({ product }: LandingClientProps) {
   const images = product.imageUrls.length ? product.imageUrls : [];
   const heroImage = images[0] ?? "";
   const gallery = images.slice(1, 6);
-  const total = product.priceMad * quantity;
-  const discount = product.oldPriceMad
+  const regularTotal = product.priceMad * quantity;
+  const discountMad = orderDiscount(quantity, product);
+  const total = orderTotal(quantity, product.priceMad, discountMad);
+  const hasOffer = !!product.offerQty && !!product.offerTotalMad;
+  const oldDiscount = product.oldPriceMad
     ? Math.round((1 - product.priceMad / product.oldPriceMad) * 100)
     : 0;
 
@@ -168,11 +172,17 @@ export function LandingClient({ product }: LandingClientProps) {
       {/* ── 1. Slim header ─────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-stone-100">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-600 text-white rounded-lg px-2 py-1 text-lg font-extrabold leading-none">
-              S
+          <div className="flex items-center gap-2.5">
+            <span className="bg-stone-900 rounded-xl px-2 py-1.5 flex items-center shrink-0">
+              <Image
+                src="/logo.png"
+                alt="ShoeSpot"
+                width={96}
+                height={66}
+                priority
+                className="h-9 w-auto"
+              />
             </span>
-            <span className="font-extrabold text-xl tracking-tight">StyleKicks</span>
           </div>
           <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
             <Banknote className="h-3.5 w-3.5" />
@@ -198,21 +208,28 @@ export function LandingClient({ product }: LandingClientProps) {
               <span className="text-4xl font-extrabold text-emerald-600">
                 {Math.round(product.priceMad)} درهم
               </span>
+              {hasOffer && (
+                <Badge className="bg-stone-900 text-yellow-300 border-stone-900 hover:bg-stone-900 text-sm whitespace-nowrap">
+                  <BadgePercent className="h-3.5 w-3.5" />
+                  عرض خاص: {product.offerQty === 2 ? "زوج" : product.offerQty} بـ
+                  {Math.round(product.offerTotalMad ?? 0)} درهم
+                </Badge>
+              )}
               {product.oldPriceMad && (
                 <>
                   <span className="text-xl text-stone-400 line-through">
                     {Math.round(product.oldPriceMad)} درهم
                   </span>
                   <Badge className="bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100 text-sm">
-                    <BadgePercent className="h-3.5 w-3.5" />−{discount}%
+                    <BadgePercent className="h-3.5 w-3.5" />−{oldDiscount}%
                   </Badge>
                 </>
               )}
             </div>
 
             <p className="text-stone-600 text-lg leading-relaxed">
-              سنيكرز خفيف ومريح، صالح للاستعمال اليومي — كتخلص فقط ملي توصلك السلعة
-              لباب دارك.
+              سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع
+              المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.
             </p>
 
             <Button
@@ -257,8 +274,8 @@ export function LandingClient({ product }: LandingClientProps) {
             },
             {
               icon: Truck,
-              title: "توصيل 24-48 ساعة",
-              text: "لجميع المدن المغربية",
+              title: "التوصيل فابور",
+              text: "لجميع المدن المغربية — 24-48 ساعة",
             },
             {
               icon: RefreshCw,
@@ -402,7 +419,11 @@ export function LandingClient({ product }: LandingClientProps) {
                     <Plus className="h-4 w-4" />
                   </button>
                   <span className="text-sm text-stone-500">
-                    (الحد الأقصى 3 فالطلب الواحد)
+                    {hasOffer
+                      ? `الوحدة ${Math.round(product.priceMad)} درهم — ${
+                          product.offerQty === 2 ? "زوج" : product.offerQty
+                        } بـ${Math.round(product.offerTotalMad ?? 0)} درهم`
+                      : "(الحد الأقصى 3 فالطلب الواحد)"}
                   </span>
                 </div>
               </div>
@@ -466,10 +487,23 @@ export function LandingClient({ product }: LandingClientProps) {
                 </div>
                 <div className="flex justify-between border-t border-stone-200 pt-2 mt-2 text-base">
                   <span className="font-bold">المجموع</span>
-                  <span className="font-extrabold text-emerald-600 ltr-num">
+                  <span className="font-extrabold text-emerald-600 ltr-num flex items-center gap-2">
+                    {discountMad > 0 && (
+                      <span className="text-sm font-normal text-stone-400 line-through ltr-num">
+                        {Math.round(regularTotal)} درهم
+                      </span>
+                    )}
                     {Math.round(total)} درهم
                   </span>
                 </div>
+                {discountMad > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-emerald-700 text-sm font-semibold">
+                      وفّرت {Math.round(discountMad)} درهم مع عرض الزوج
+                    </span>
+                    <span className="text-stone-400 text-sm">الدفع عند الاستلام</span>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -597,7 +631,7 @@ export function LandingClient({ product }: LandingClientProps) {
             {[
               { icon: Banknote, text: "الدفع عند الاستلام" },
               { icon: RefreshCw, text: "تبديل مجاني للمقاس" },
-              { icon: Truck, text: "توصيل سريع 24-48 ساعة" },
+              { icon: Truck, text: "التوصيل فابور" },
             ].map((t) => (
               <div key={t.text} className="flex items-center justify-center gap-2 py-2">
                 <t.icon className="h-5 w-5 text-emerald-600" />
@@ -635,7 +669,7 @@ export function LandingClient({ product }: LandingClientProps) {
       <footer className="border-t border-stone-100 py-6">
         <div className="max-w-5xl mx-auto px-4 text-center space-y-2">
           <p className="text-stone-600 text-sm">
-            © 2026 StyleKicks — الدفع عند الاستلام فجميع المغرب
+            © 2026 ShoeSpot — الدفع عند الاستلام فجميع المغرب
           </p>
           <Link
             href="/login"
@@ -653,12 +687,21 @@ export function LandingClient({ product }: LandingClientProps) {
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex flex-col">
-            <span className="text-xl font-extrabold text-emerald-600 ltr-num">
-              {Math.round(product.priceMad)} درهم
-            </span>
-            {product.oldPriceMad && (
-              <span className="text-xs text-stone-400 line-through ltr-num">
-                {Math.round(product.oldPriceMad)} درهم
+            {hasOffer ? (
+              <>
+                <span className="text-sm font-bold text-stone-900">
+                  <span className="text-emerald-600 ltr-num">
+                    {Math.round(product.offerTotalMad ?? 0)} درهم
+                  </span>{" "}
+                  {product.offerQty === 2 ? "للزوج" : `لـ${product.offerQty}`}
+                </span>
+                <span className="text-xs text-stone-400 ltr-num">
+                  الوحدة {Math.round(product.priceMad)} درهم
+                </span>
+              </>
+            ) : (
+              <span className="text-xl font-extrabold text-emerald-600 ltr-num">
+                {Math.round(product.priceMad)} درهم
               </span>
             )}
           </div>

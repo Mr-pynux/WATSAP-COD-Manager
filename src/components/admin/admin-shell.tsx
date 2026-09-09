@@ -111,11 +111,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <Sidebar collapsible="icon" side="right">
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2 py-1.5">
-            <span className="bg-primary text-primary-foreground rounded-lg px-2 py-1 text-lg font-extrabold leading-none">
-              S
+            <span className="bg-stone-900 rounded-xl p-1.5 flex items-center shrink-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+              <img src="/logo.png" alt="ShoeSpot" className="h-9 w-auto group-data-[collapsible=icon]:h-8" />
             </span>
             <SidebarMenuButton asChild className="flex-1 font-extrabold text-lg justify-start">
-              <span>StyleKicks</span>
+              <span>ShoeSpot</span>
             </SidebarMenuButton>
           </div>
         </SidebarHeader>

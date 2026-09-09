@@ -1,5 +1,6 @@
 import type { Order, Product, Courier } from "@prisma/client";
 import type { OrderDTO, ProductDTO } from "./types";
+import { orderTotal } from "./pricing";
 
 type OrderWithRelations = Order & {
   product: Pick<Product, "id" | "name" | "costMad">;
@@ -25,7 +26,8 @@ export function toOrderDTO(o: OrderWithRelations): OrderDTO {
     color: o.color,
     quantity: o.quantity,
     unitPriceMad: o.unitPriceMad,
-    totalMad: o.quantity * o.unitPriceMad,
+    discountMad: o.discountMad ?? 0,
+    totalMad: orderTotal(o.quantity, o.unitPriceMad, o.discountMad),
     status: o.status,
     attempts: o.attempts,
     lastAttemptAt: o.lastAttemptAt ? o.lastAttemptAt.toISOString() : null,
@@ -60,6 +62,8 @@ export function toProductDTO(
     imageUrls: parseJsonArray<string>(p.imageUrls),
     priceMad: p.priceMad,
     oldPriceMad: p.oldPriceMad ?? null,
+    offerQty: p.offerQty ?? null,
+    offerTotalMad: p.offerTotalMad ?? null,
     costMad: p.costMad,
     sizes: parseJsonArray<string>(p.sizes),
     colors: parseJsonArray<{ name: string; hex: string }>(p.colors),

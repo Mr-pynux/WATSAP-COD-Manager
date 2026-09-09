@@ -1,4 +1,4 @@
-# AGENTS.md — COD Order Manager "StyleKicks" (v1, single-user)
+# AGENTS.md — COD Order Manager "ShoeSpot" (v1, single-user)
 
 Read this file fully before making any change. If context is lost, re-read it.
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { orderTotal } from "@/lib/pricing";
 import { requireAdmin, unauthorized } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +67,10 @@ export async function GET() {
     const ret = returned.filter((o) => o.productId === p.id);
     const productOrders = orders30.filter((o) => o.productId === p.id).length;
 
-    const revenueMad = del.reduce((s, o) => s + o.quantity * o.unitPriceMad, 0);
+    const revenueMad = del.reduce(
+      (s, o) => s + orderTotal(o.quantity, o.unitPriceMad, o.discountMad),
+      0
+    );
     const productCostMad = del.reduce((s, o) => s + o.product.costMad * o.quantity, 0);
     const courierFeesMad =
       del.reduce((s, o) => s + (o.courier?.feePerDeliveryMad ?? 0), 0) +
