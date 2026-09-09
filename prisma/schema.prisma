@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  imageUrls   String // JSON array
+  priceMad    Float
+  oldPriceMad Float?
+  costMad     Float    @default(0)
+  sizes       String // JSON array ["39".."45"]
+  colors      String // JSON array [{name,hex}]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  orders      Order[]
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  orderNumber   Int           @unique
+  customerName  String
+  phone         String
+  city          String
+  district      String?
+  landmark      String?
+  productId     String
+  product       Product       @relation(fields: [productId], references: [id])
+  size          String
+  color         String?
+  quantity      Int           @default(1)
+  unitPriceMad  Float
+  status        String        @default("new")
+  attempts      Int           @default(0)
+  lastAttemptAt DateTime?
+  shipDate      DateTime?
+  courierId     String?
+  courier       Courier?      @relation(fields: [courierId], references: [id])
+  tracking      String?
+  notes         String?
+  returnReason  String?
+  createdAt     DateTime      @default(now())
+  confirmedAt   DateTime?
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  events        OrderEvent[]
+}
+
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String // created | whatsapp_click | status_change
+  detail    String? // JSON {from,to,templateKey}
+  createdAt DateTime @default(now())
+}
+
+model MessageTemplate {
+  id     String @id @default(cuid())
+  key    String @unique
+  bodyAr String
+}
+
+model BlacklistEntry {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  strikes   Int      @default(0)
+  reasons   String // JSON array
+  createdAt DateTime @default(now())
+}
+
+model Courier {
+  id                 String  @id @default(cuid())
+  name               String
+  contact            String?
+  feePerDeliveryMad  Float   @default(0)
+  feePerReturnMad    Float   @default(0)
+  orders             Order[]
+}
+
+model DailyAdSpend {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  amountMad Float
+}

@@ -1,0 +1,68 @@
+🚀 Initializing Z-AI SDK...
+🔎 Searching images: "white sneakers shoes product photo clean background e-commerce"
+✅ Got 8 images
+{
+  "success": true,
+  "query": "white sneakers shoes product photo clean background e-commerce",
+  "count": 8,
+  "ranked": false,
+  "captioned_count": 0,
+  "results": [
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/16e2e26e2d2f.jpg",
+      "caption": "",
+      "source": "Business Insider",
+      "original_width": "1600px",
+      "original_height": "900px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0ebaa6145dcb.jpeg",
+      "caption": "",
+      "source": "Pexels",
+      "original_width": "4928px",
+      "original_height": "3264px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/60716d5bb2e0.jpg",
+      "caption": "",
+      "source": "ELLE",
+      "original_width": "1120px",
+      "original_height": "1124px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/6fdca56479ce.jpg",
+      "caption": "",
+      "source": "p448.com",
+      "original_width": "1000px",
+      "original_height": "1300px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b7f0de266de9.png",
+      "caption": "",
+      "source": "Midway Sports",
+      "original_width": "1000px",
+      "original_height": "1000px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7db1f010556d.webp",
+      "caption": "",
+      "source": "www.superkicks.in",
+      "original_width": "4320px",
+      "original_height": "1950px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8fa13a4e54cc.jpg",
+      "caption": "",
+      "source": "www.greats.com",
+      "original_width": "1080px",
+      "original_height": "1920px"
+    },
+    {
+      "original_url": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e3d3a43aea6a.jpg",
+      "caption": "",
+      "source": "Wallpaper Magazine",
+      "original_width": "1920px",
+      "original_height": "1080px"
+    }
+  ]
+}
