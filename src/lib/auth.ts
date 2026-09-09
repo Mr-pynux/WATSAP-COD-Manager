@@ -39,13 +39,32 @@ export function unauthorized(): NextResponse {
   return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 }
 
-/** Cookie options for the admin session. */
-export function adminCookieOptions() {
+/** Detect a secure (HTTPS) context — via proxy headers or request URL.
+ *  Needed so the admin cookie works through HTTPS preview links / iframes. */
+export function isSecureRequest(req?: Request): boolean {
+  if (!req) return false;
+  const fwdProto = req.headers.get("x-forwarded-proto");
+  if (fwdProto) return fwdProto.split(",")[0].trim().toLowerCase() === "https";
+  if (req.headers.get("x-forwarded-ssl")?.toLowerCase() === "on") return true;
+  try {
+    return new URL(req.url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Cookie options for the admin session.
+ *  HTTPS: SameSite=None + Secure (+Partitioned) so the cookie survives
+ *  third-party iframe previews. HTTP dev: SameSite=Lax. */
+export function adminCookieOptions(req?: Request) {
+  const secure = isSecureRequest(req);
   return {
     name: ADMIN_COOKIE,
     value: signAdmin(),
     httpOnly: true as const,
-    sameSite: "lax" as const,
+    sameSite: secure ? ("none" as const) : ("lax" as const),
+    secure,
+    ...(secure ? { partitioned: true } : {}),
     path: "/",
     maxAge: 60 * 60 * 24 * 7, // 7 days
   };

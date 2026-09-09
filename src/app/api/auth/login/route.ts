@@ -30,10 +30,11 @@ export async function POST(req: Request) {
   }
 
   const store = await cookies();
-  const opts = adminCookieOptions();
+  const opts = adminCookieOptions(req);
   store.set(opts.name, opts.value, {
     httpOnly: opts.httpOnly,
     sameSite: opts.sameSite,
+    ...(opts.secure ? { secure: true, partitioned: true } : {}),
     path: opts.path,
     maxAge: opts.maxAge,
   });

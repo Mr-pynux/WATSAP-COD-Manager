@@ -112,3 +112,18 @@ Work Log:
 
 Stage Summary:
 - تحكم كامل فالمنتج من اللوحة (صور/فيديو/أوصاف/أثمنة) + هوية ذهبية متناسقة مع اللوغو + عارض 3D للفحص بالسحب/الميلان/الفيديو. البيانات التجريبية مرجعة (150/زوج220/6 صور/بلا فيديو)، الطلبات محفوظة، lint نظيف.
+---
+Task ID: 9
+Agent: Super Z (main)
+Task: إصلاح "صفحة الأدمين لا تدخل" — كوكي الجلسة كيترفض ف HTTPS/iframe
+
+Work Log:
+- التشخيص: dev.log بيّن POST /api/auth/login 200 متكرر ثم رجوع لـ /login — الكوكي ماكيتخزنش عند العميل
+- السبب: adminCookieOptions كان كيصدر SameSite=Lax بلا Secure — المتصفح كيرفضو فسياق الطرف الثالث (preview HTTPS داخل iframe فالشات) فيبقى middleware بلا كوكي وكيرد لـ /login
+- الإصلاح: isSecureRequest() (x-forwarded-proto / x-forwarded-ssl / URL) → HTTPS: SameSite=None + Secure + Partitioned / HTTP dev: SameSite=Lax؛ حدّث login + logout routes باش يمررو req
+- تحقق curl: بلا هيدر → SameSite=lax؛ مع x-forwarded-proto:https → SameSite=none; Secure; Partitioned؛ /admin بلا كوكي 307→login، بالكوكي 200، /api/admin/products 200
+- تحقق agent-browser: fill creds → click دخول → wait --url /admin → لوحة الرئيسية ظاهرة (القائمة كاملة + KPIs)؛ screenshot scripts/admin-login-fixed.png؛ صفر أخطاء كونسول
+- lint نظيف
+
+Stage Summary:
+- دخول الأدمين خدام دابا فجميع السياقات (localhost + رابط preview HTTPS + iframe). نفس الكريدينسيالات: admin@shop.ma / admin123.
