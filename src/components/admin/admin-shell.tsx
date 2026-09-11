@@ -18,6 +18,8 @@ import {
   LogOut,
   Moon,
   Sun,
+  BarChart3,
+  Bot,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -54,7 +56,8 @@ const NAV = [
   { href: "/admin/products", label: "المنتجات", icon: Package, more: true },
   { href: "/admin/blacklist", label: "البلاك ليست", icon: Ban, more: true },
   { href: "/admin/couriers", label: "الناقلين", icon: Truck, more: true },
-  { href: "/admin/templates", label: "الرسائل", icon: MessageSquareText, more: true },
+  { href: "/admin/templates", label: "قوالب الرسائل", icon: MessageSquareText, more: true },
+  { href: "/admin/bot", label: "إعدادات البوت", icon: Bot, more: true },
 ];
 
 const TITLES: Record<string, string> = {
