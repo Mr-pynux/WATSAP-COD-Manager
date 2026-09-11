@@ -1,77 +1,114 @@
-# AGENTS.md — COD Order Manager "ShoeSpot" (v1, single-user)
+{
+  "project": "COD Order Manager - BACKEND + ADMIN (frontend landing page handled separately)",
+  
+  "operating_rules": [
+    "Read this entire file before starting. Work PHASE BY PHASE.",
+    "After each phase: STOP, list what to verify, wait for my confirmation.",
+    "git commit after each phase: 'phase N: <what was done>'",
+    "Do NOT add features not in this spec.",
+    "Never print or log secrets. Service role key stays server-only.",
+    "If context is lost: re-read this file + check git log."
+  ],
 
-Read this file fully before making any change. If context is lost, re-read it.
+  "stack": {
+    "framework": "Next.js 15 App Router + TypeScript strict",
+    "backend": "Supabase (@supabase/ssr) + Server Actions (no separate API needed)",
+    "admin_ui": "shadcn/ui + Tailwind (dashboard pages)",
+    "no_paid_apis": true,
+    "whatsapp": "wa.me deep links ONLY"
+  },
 
-## Project
-Cash-on-delivery order manager for a Moroccan shoe seller:
-public Arabic RTL landing page (single product) → order form → admin dashboard
-(WhatsApp wa.me confirmation, follow-up queue, blacklist, couriers, P&L, CSV export).
-All user-facing text: Moroccan Darija / Arabic, RTL. All amounts: MAD (درهم).
-Dates: stored ISO, displayed dd/MM/yyyy.
+  "env_vars_required": [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY (server-only, never client)",
+    "NEXT_PUBLIC_META_PIXEL_ID",
+    "NEXT_PUBLIC_SELLER_WHATSAPP"
+  ],
 
-## Stack (this repo)
-- Next.js 16 App Router + TypeScript strict + Tailwind CSS 4 + shadcn/ui + lucide-react
-- Prisma ORM + SQLite (file `db/custom.db`) — see "Production path" below for Supabase port
-- Auth: single admin, HMAC-SHA256 signed httpOnly cookie `admin_session` (`src/lib/auth.ts`, env `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SESSION_SECRET`)
-- WhatsApp: **wa.me deep links ONLY** — no WhatsApp API, no whatsapp-web.js
-- Meta Pixel: optional, activates only when `NEXT_PUBLIC_META_PIXEL_ID` is set
+  "phone_rules": {
+    "validation_regex": "^(0)(6|7)[0-9]{8}$",
+    "normalize": "strip +212, spaces, dashes; store as 06XXXXXXXX",
+    "wa_link": "https://wa.me/212{phone_without_leading_0}?text={urlencoded}"
+  },
 
-## Operating rules
-1. Work phase by phase. After completing a phase STOP and ask for browser verification.
-2. After each phase: git commit `phase N: <summary>`.
-3. Stick to this spec. Do NOT add features that are not described here.
-4. Prefer official packages: shadcn/ui components, zod, date-fns, sonner.
-5. Never commit `.env` / `db/custom.db`.
+  "supabase_setup": {
+    "migrations_folder": "/supabase/migrations/ (numbered: 001_schema.sql, 002_rls.sql, 003_seed.sql)",
+    "tables": {
+      "products": "id uuid pk default gen_random_uuid(), name text, image_urls text[], price_mad numeric, cost_mad numeric, sizes text[], colors text[], active boolean default true",
+      "orders": "id uuid pk, customer_name text, phone text, city text, district text, landmark text, product_id uuid references products, size text, color text, quantity int default 1, unit_price_mad numeric, status text default 'new', attempts int default 0, courier_id uuid, tracking text, notes text, return_reason text, created_at timestamptz default now(), confirmed_at timestamptz, shipped_at timestamptz, delivered_at timestamptz",
+      "order_events": "id uuid pk, order_id uuid references orders, event_type text, payload jsonb, created_at timestamptz default now()",
+      "message_templates": "id uuid pk, key text unique, body_ar text",
+      "blacklist": "id uuid pk, phone text, strikes int default 1, reasons text[], created_at timestamptz default now()",
+      "couriers": "id uuid pk, name text, contact text, fee_per_delivery_mad numeric, fee_per_return_mad numeric",
+      "daily_ad_spend": "date date pk, amount_mad numeric"
+    },
+    "orders_statuses_check": "CHECK constraint: status IN ('new','confirmed','no_answer','retry','postponed','canceled','shipped','delivered','returned')",
+    "orders_indexes": "index on status, index on phone, index on created_at desc"
+  },
 
-## Environment variables
-```
-DATABASE_URL=file:/home/z/my-project/db/custom.db
-ADMIN_EMAIL=admin@shop.ma
-ADMIN_PASSWORD=admin123            # change in production
-SESSION_SECRET=<random 64 hex>
-NEXT_PUBLIC_SELLER_WHATSAPP=212600000000   # seller number 2126XXXXXXXX
-NEXT_PUBLIC_META_PIXEL_ID=                  # optional
-```
+  "rls_policies": [
+    "products: SELECT for anon AND authenticated",
+    "orders: INSERT for anon (public form), SELECT/UPDATE/DELETE for authenticated only",
+    "message_templates, blacklist, couriers, daily_ad_spend, order_events: authenticated only"
+  ],
 
-## Domain rules
-- Phone: Moroccan mobile `^0(6|7)[0-9]{8}$`; normalize (+212/212 → 06/07). wa.me link = `https://wa.me/212{phone without leading 0}?text={encoded}`.
-- Statuses: new, confirmed, no_answer, retry, postponed, canceled, shipped, delivered, returned.
-- Template selection: new & attempts=0 → confirm_1 | no_answer/retry & attempts=1 → followup_2 | attempts≥2 → followup_3 | confirmed & ships tomorrow → day_before | shipped → shipped.
-- WhatsApp click = log order_event, attempts++, lastAttemptAt=now, no_answer → retry.
-- Auto-blacklist: when an order becomes returned/canceled, if the phone reaches ≥2 such orders → upsert BlacklistEntry (strikes = count).
-- CSV export (for courier): UTF-8 BOM + CRLF. Columns: رقم الطلب، الاسم، الهاتف، المدينة، الحي/نقطة دالة، المنتج (مقاس/لون)، الكمية، المبلغ (درهم)، ملاحظات.
-- P&L per product (30d): delivered revenue − product cost − courier fees (delivery + return) − ad-spend allocation (total ad spend × product orders / total orders).
+  "seed_sql": {
+    "message_templates": [
+      "confirm_1: 'سلام {name} 👋\\nوصلنا ططلبك ديال {product} مقاس {size} ✅\\n💰 {total} درهم — الدفع عند الاستلام\\n📍 {city}\\n📏 المقاس عندك التبديل ديالو مجاني إلا ماجاكش\\n\\nجاوب بـ *1* للتأكيد ولا *2* للإلغاء 🙏'",
+      "followup_2: 'سلام {name} 🙏 مازال مقفلين معانا فتأكيد {product}...\\nالكمية محدودة — جاوب *1* للتأكيد / *2* للإلغاء'",
+      "followup_3: 'آخر رسالة 🙏 إلا ما تأكدش الطلب ديال {product} هاد اليوم غنلغيو من النظام.\\n*1* تأكيد / *2* إلغاء'",
+      "day_before: 'سلام {name} ✅ الطلب ديال {product} غيخرج غدا للتوصيل 🚚\\nجاوب *1* باش نأكدو، ورجاك تكون متوفر على الرقم 🙏'",
+      "shipped: 'طلبك فالطريق 🚚 رقم التتبع: {tracking}'",
+      "thanks: 'شكرا على الثقة 🙏 إلا عجبك المقاس والتصميم شاركهم مع صحابك 😉'"
+    ]
+  },
 
-## Structure map
-```
-src/app/                 routes
-  page.tsx               public landing (hero, configurator, order form, gallery, sticky CTA)
-  success/               order confirmation page (?n=orderNumber)
-  login/                 admin login
-  admin/                 dashboard, orders, followup, blacklist, couriers, finance, templates
-  api/                   auth, orders (+bulk, export), whatsapp, kpis, followup, blacklist,
-                         couriers, templates, finance, products
-src/lib/                 auth.ts, whatsapp.ts (templates engine), phone.ts, csv.ts, constants.ts, db.ts
-src/components/          ui/ (shadcn) + landing/ + admin/
-prisma/schema.prisma     Product, Order, OrderEvent, MessageTemplate, BlacklistEntry, Courier, DailyAdSpend
-prisma/seed.ts           demo product, 7 Darija templates, 3 couriers, 17 orders, 14d ad spend
-supabase/migrations/     production Postgres port (RLS included) — see below
-```
+  "server_actions_required": [
+    "createOrder: public, validates phone regex, checks blacklist (if match: still create but flag), inserts order + order_event 'created'",
+    "updateOrderStatus: admin, updates status + relevant timestamp + order_event",
+    "logWhatsAppAttempt: admin, increments attempts, sets no_answer->retry, logs event with template key used",
+    "addToBlacklist / checkBlacklist: admin + auto after 2 strikes",
+    "exportOrdersCSV: admin, takes order IDs array, returns CSV string (CRLF, columns: name, phone, city, district+landmark, product+size+color, COD amount, notes)",
+    "saveAdSpend: admin, upsert daily_ad_spend",
+    "getFollowupQueue: admin, returns no_answer/retry orders grouped by '3h+' and '24h+' since last attempt",
+    "getDoubleConfirmList: admin, confirmed orders where shipped_at is tomorrow"
+  ],
 
-## Production path (v1.1 — when ready to go live)
-1. Create Supabase project (region Frankfurt), run `supabase/migrations/0001_init.sql` in SQL Editor, then `0002_seed.sql`.
-2. Create the single admin user in Supabase Auth dashboard.
-3. Port data access from Prisma to `@supabase/ssr` (tables/columns match the Prisma schema; RLS policies from the user spec are already in the migration: orders → anon INSERT only, products → anon SELECT, everything else → authenticated only).
-4. Deploy repo to Vercel (free), set env vars, point the .com domain, verify Pixel with Meta Pixel Helper.
-   Alternative (zero porting): keep Prisma + SQLite and host on any small VPS / the seller's own machine.
+  "admin_pages_to_build": [
+    "/login: Supabase auth, email + password",
+    "/admin: KPI cards (orders_today, confirmation_rate, delivered_rate_30d, cost_per_DELIVERED_order, revenue_30d, net_profit_30d)",
+    "/admin/orders: table with filters (status/date/city), phone search, bulk status update, WhatsApp green button per row (calls logWhatsAppAttempt then opens wa.me)",
+    "/admin/followups: queue view with next template auto-selected",
+    "/admin/double-confirm: list for tomorrow's deliveries",
+    "/admin/blacklist: warning banner on matching phones in orders; manage entries",
+    "/admin/couriers: list with computed return_rate",
+    "/admin/finance: ad spend input form + P&L per product",
+    "/admin/templates: CRUD editor with RTL Arabic textareas"
+  ],
 
-## Demo credentials
-admin@shop.ma / admin123 (see .env; change before going live)
+  "finance_logic": {
+    "per_product": "delivered_revenue = SUM(delivered.unit_price*qty) - product_cost - courier fees(delivered+returned) - ad_spend_allocation",
+    "ad_spend_allocation": "divide daily spend by number of orders created that day, attribute per product proportionally",
+    "cost_per_delivered": "total_ad_spend_30d / total_delivered_30d"
+  },
 
-### Product management (v1.1)
-- `/admin/products` — product list (active toggle, delete-guard when orders exist)
-- `/admin/products/[id]` — full editor: images (URL/upload/library + reorder), videoUrl, description, features, prices, offer, sizes, colors
-- APIs: `GET/POST /api/admin/products`, `GET/PUT/DELETE /api/admin/products/[id]` (zod via `src/lib/product-schema.ts`), `POST /api/admin/upload` (images → `uploads/` dir), `GET /api/media/[name]` (serves uploads, path-traversal safe)
-- Product model extra columns: `videoUrl`, `description`, `features` (JSON string array)
-- Landing: `Product3DViewer` (drag-to-rotate 360 illusion, hover tilt, floor reflection, video item, fullscreen dialog) — plain `<img>` everywhere user-editable URLs render
-- Brand: gold `#f0c000` (--primary + `brand` token) from logo, dark studio stage, black/yellow badges
+  "phases": [
+    "B1: Supabase migrations (001,002,003) + create .env.example + README with setup steps",
+    "B2: Auth (login page + middleware protecting /admin/*) + create admin user instructions",
+    "B3: Orders table UI + WhatsApp button + server actions + order_events",
+    "B4: Followup queue + double-confirm + blacklist logic",
+    "B5: CSV export + couriers + finance (ad spend + P&L)",
+    "B6: Templates editor + KPIs on /admin"
+  ]
+}
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

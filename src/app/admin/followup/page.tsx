@@ -22,14 +22,12 @@ import { WaButton } from "@/components/admin/wa-button";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/constants";
 import { fmtDateTime } from "@/lib/format";
 import type { OrderDTO } from "@/lib/types";
+import { getFollowupServer, logConfirmedTodayServer, type FollowupResponse } from "./actions";
+import { updateOrderStatusServer } from "../orders/actions";
 
 type QueueOrder = OrderDTO & { suggestedTemplateKey?: string };
 
-interface FollowupData {
-  queue: QueueOrder[];
-  doubleConfirm: OrderDTO[];
-  counts: { queue: number; doubleConfirm: number };
-}
+
 
 const HOUR = 3600 * 1000;
 
@@ -52,14 +50,13 @@ const GROUPS: { key: "24h" | "3h" | "recent"; label: string; hint: string }[] = 
 ];
 
 export default function FollowupPage() {
-  const [data, setData] = useState<FollowupData | null>(null);
+  const [data, setData] = useState<FollowupResponse | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/followup");
-      if (!res.ok) throw new Error();
-      setData((await res.json()) as FollowupData);
+      const res = await getFollowupServer();
+      setData(res);
     } catch {
       toast.error("تعذر تحميل قائمة المتابعة");
     }
@@ -72,12 +69,7 @@ export default function FollowupPage() {
   async function quickStatus(order: OrderDTO, status: OrderStatus) {
     setBusyId(order.id);
     try {
-      const res = await fetch(`/api/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error();
+      await updateOrderStatusServer(order.id, status);
       toast.success(`الطلب #${order.orderNumber} ولّى ${STATUS_LABELS[status]}`);
       await load();
     } catch {
@@ -90,15 +82,7 @@ export default function FollowupPage() {
   async function confirmedToday(order: OrderDTO) {
     setBusyId(order.id);
     try {
-      const res = await fetch(`/api/orders/${order.id}/event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "status_change",
-          detail: { from: "confirmed", to: "confirmed", note: "تأكد اليوم (تأكيد مزدوج)" },
-        }),
-      });
-      if (!res.ok) throw new Error();
+      await logConfirmedTodayServer(order.id);
       toast.success("تسجل التأكيد ديال اليوم");
       await load();
     } catch {

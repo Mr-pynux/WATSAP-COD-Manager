@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { TEMPLATE_LABELS, TEMPLATE_VARIABLES } from "@/lib/constants";
-import type { TemplateDTO } from "@/lib/types";
+import { getTemplatesServer, saveTemplateServer, type TemplateDTO } from "./actions";
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<TemplateDTO[] | null>(null);
@@ -19,12 +19,10 @@ export default function TemplatesPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/templates");
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { templates: TemplateDTO[] };
-      setTemplates(data.templates);
+      const res = await getTemplatesServer();
+      setTemplates(res.templates);
       const d: Record<string, string> = {};
-      for (const t of data.templates) d[t.key] = t.bodyAr;
+      for (const t of res.templates) d[t.key] = t.bodyAr;
       setDrafts(d);
     } catch {
       toast.error("تعذر تحميل الرسائل");
@@ -43,12 +41,7 @@ export default function TemplatesPage() {
     }
     setSavingKey(key);
     try {
-      const res = await fetch("/api/templates", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, bodyAr: body }),
-      });
-      if (!res.ok) throw new Error();
+      await saveTemplateServer(key, body);
       toast.success(`تسجل قالب "${TEMPLATE_LABELS[key] ?? key}"`);
       await load();
     } catch {

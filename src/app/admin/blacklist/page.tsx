@@ -31,6 +31,7 @@ import {
 import { fmtDate } from "@/lib/format";
 import { RETURN_REASON_LABELS, type ReturnReason } from "@/lib/constants";
 import type { BlacklistEntryDTO } from "@/lib/types";
+import { getBlacklistEntriesServer, addBlacklistServer, deleteBlacklistServer } from "./actions";
 
 function reasonLabel(raw: string): string {
   if (raw in RETURN_REASON_LABELS) return RETURN_REASON_LABELS[raw as ReturnReason];
@@ -46,10 +47,8 @@ export default function BlacklistPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/blacklist");
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { entries: BlacklistEntryDTO[] };
-      setEntries(data.entries);
+      const res = await getBlacklistEntriesServer();
+      setEntries(res.entries ?? []);
     } catch {
       toast.error("تعذر تحميل البلاك ليست");
     }
@@ -62,22 +61,13 @@ export default function BlacklistPage() {
   async function addEntry() {
     setAdding(true);
     try {
-      const res = await fetch("/api/blacklist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, reason: reason || undefined }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "رقم غير صالح");
-        return;
-      }
+      await addBlacklistServer(phone, reason || "يدوي");
       toast.success("تزاد الرقم للبلاك ليست");
       setPhone("");
       setReason("");
       await load();
-    } catch {
-      toast.error("تعذر الإضافة");
+    } catch (err: any) {
+      toast.error(err.message || "رقم غير صالح");
     } finally {
       setAdding(false);
     }
@@ -86,8 +76,7 @@ export default function BlacklistPage() {
   async function removeEntry(id: string) {
     setDeleting(id);
     try {
-      const res = await fetch(`/api/blacklist/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      await deleteBlacklistServer(id);
       toast.success("تحيد من البلاك ليست");
       await load();
     } catch {

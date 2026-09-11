@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtPercent } from "@/lib/format";
 import type { CourierStatsDTO } from "@/lib/types";
+import { getCouriersDetailedServer, addCourierServer, updateCourierServer } from "./actions";
 
 export default function CouriersPage() {
   const [couriers, setCouriers] = useState<CourierStatsDTO[] | null>(null);
@@ -27,12 +28,11 @@ export default function CouriersPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/couriers");
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { couriers: CourierStatsDTO[] };
-      setCouriers(data.couriers);
+      const res = await getCouriersDetailedServer();
+      const data = res.couriers;
+      setCouriers(data);
       const drafts: Record<string, { delivery: string; return: string }> = {};
-      for (const c of data.couriers) {
+      for (const c of data) {
         drafts[c.id] = {
           delivery: String(c.feePerDeliveryMad),
           return: String(c.feePerReturnMad),
@@ -59,12 +59,7 @@ export default function CouriersPage() {
     }
     setSavingId(c.id);
     try {
-      const res = await fetch(`/api/couriers/${c.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feePerDeliveryMad: delivery, feePerReturnMad: ret }),
-      });
-      if (!res.ok) throw new Error();
+      await updateCourierServer(c.id, { feePerDeliveryMad: delivery, feePerReturnMad: ret });
       toast.success(`تسجلو أثمنة ${c.name}`);
       await load();
     } catch {
@@ -83,17 +78,12 @@ export default function CouriersPage() {
     }
     setAdding(true);
     try {
-      const res = await fetch("/api/couriers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          contact: contact.trim() || null,
-          feePerDeliveryMad: delivery,
-          feePerReturnMad: ret,
-        }),
+      await addCourierServer({
+        name: name.trim(),
+        contact: contact.trim() || null,
+        feePerDeliveryMad: delivery,
+        feePerReturnMad: ret,
       });
-      if (!res.ok) throw new Error();
       toast.success("تزاد الناقل");
       setName("");
       setContact("");

@@ -19,37 +19,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { PnlResponse } from "./actions";
+import { getFinancePnlServer, getAdSpendServer, saveAdSpendServer } from "./actions";
 import { fmtMad, fmtPercent } from "@/lib/format";
 
 interface AdSpendEntry {
   date: string;
   amountMad: number;
-}
-
-interface ProductPnl {
-  productId: string;
-  productName: string;
-  deliveredCount: number;
-  returnedCount: number;
-  revenueMad: number;
-  productCostMad: number;
-  courierFeesMad: number;
-  adSpendMad: number;
-  ordersShare: number;
-  netMad: number;
-}
-
-interface PnlData {
-  products: ProductPnl[];
-  adSpend30d: number;
-  totalOrders30d: number;
-  summary: {
-    revenueMad: number;
-    totalCostsMad: number;
-    netMad: number;
-    productCostMad: number;
-    courierFeesMad: number;
-  };
 }
 
 function money(v: number): string {
@@ -58,7 +34,7 @@ function money(v: number): string {
 
 export default function FinancePage() {
   const [adspends, setAdspends] = useState<AdSpendEntry[] | null>(null);
-  const [pnl, setPnl] = useState<PnlData | null>(null);
+  const [pnl, setPnl] = useState<PnlResponse | null>(null);
 
   const [spendDate, setSpendDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [spendAmount, setSpendAmount] = useState("");
@@ -66,15 +42,12 @@ export default function FinancePage() {
 
   const load = useCallback(async () => {
     try {
-      const [r1, r2] = await Promise.all([
-        fetch("/api/finance/adspend"),
-        fetch("/api/finance"),
+      const [adRes, pnlRes] = await Promise.all([
+        getAdSpendServer(),
+        getFinancePnlServer(),
       ]);
-      if (!r1.ok || !r2.ok) throw new Error();
-      const d1 = (await r1.json()) as { entries: AdSpendEntry[] };
-      const d2 = (await r2.json()) as PnlData;
-      setAdspends(d1.entries);
-      setPnl(d2);
+      setAdspends(adRes.entries);
+      setPnl(pnlRes);
     } catch {
       toast.error("تعذر تحميل المالية");
     }
@@ -92,13 +65,8 @@ export default function FinancePage() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/finance/adspend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: spendDate, amountMad: amount }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("تسجل مصروف الإعلانات");
+      await saveAdSpendServer(spendDate, amount);
+      toast.success("تسجل المبلغ");
       setSpendAmount("");
       await load();
     } catch {

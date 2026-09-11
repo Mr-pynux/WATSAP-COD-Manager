@@ -1,116 +1,73 @@
-"use client";
+import { login } from './actions'
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
-import { Loader2, LogIn } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-
-const schema = z.object({
-  email: z.string().min(3, "البريد مطلوب"),
-  password: z.string().min(1, "كلمة السر مطلوبة"),
-});
-
-type FormData = z.infer<typeof schema>;
-
-export default function LoginPage() {
-  const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
-
-  async function onSubmit(values: FormData) {
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "فشل تسجيل الدخول");
-        return;
-      }
-      toast.success("مرحبا بيك");
-      router.push("/admin");
-      router.refresh();
-    } catch {
-      toast.error("تعذر الاتصال بالسيرفر");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ message?: string }>
+}) {
+  const resolvedSearchParams = await searchParams;
+  const message = resolvedSearchParams?.message;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center space-y-1">
-          <CardTitle className="text-2xl font-bold">دخول المسؤول</CardTitle>
-          <CardDescription>لوحة تحكم ShoeSpot</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            <div className="space-y-2">
-              <Label htmlFor="email">البريد الإلكتروني</Label>
-              <Input
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-xl border border-zinc-100 dark:border-zinc-800">
+        <div>
+          <h2 className="mt-2 text-center text-3xl font-extrabold text-zinc-900 dark:text-white">
+            لوحة التحكم
+          </h2>
+          <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            تسجيل الدخول للإدارة
+          </p>
+        </div>
+        
+        {message && (
+          <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg text-center font-medium">
+            {message}
+          </div>
+        )}
+
+        <form className="mt-8 space-y-6" action={login}>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                البريد الإلكتروني
+              </label>
+              <input
                 id="email"
+                name="email"
                 type="email"
-                autoComplete="email"
+                required
+                className="appearance-none rounded-xl relative block w-full px-4 py-3 border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all sm:text-sm"
+                placeholder="admin@example.com"
                 dir="ltr"
-                className="text-left"
-                placeholder="admin@shop.ma"
-                {...register("email")}
               />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">كلمة السر</Label>
-              <Input
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                كلمة المرور
+              </label>
+              <input
                 id="password"
+                name="password"
                 type="password"
-                autoComplete="current-password"
-                dir="ltr"
-                className="text-left"
+                required
+                className="appearance-none rounded-xl relative block w-full px-4 py-3 border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all sm:text-sm"
                 placeholder="••••••••"
-                {...register("password")}
+                dir="ltr"
               />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              )}
             </div>
-            <Button type="submit" className="w-full h-11" disabled={submitting}>
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LogIn className="h-4 w-4" />
-              )}
-              دخول
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              الديمو: admin@shop.ma / admin123
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
-  );
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-md shadow-blue-500/30 hover:shadow-lg hover:shadow-blue-500/40"
+            >
+              تسجيل الدخول
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }

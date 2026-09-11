@@ -58,6 +58,7 @@ import {
 import { fmtDate, toDateInput } from "@/lib/format";
 import type { OrderDTO, OrdersResponse, BlacklistEntryDTO, CourierStatsDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer } from "./actions";
 
 interface Filters {
   status: string;
@@ -115,9 +116,8 @@ export default function AdminOrdersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/orders?${queryParams(filters, page)}`);
-      if (!res.ok) throw new Error();
-      setData((await res.json()) as OrdersResponse);
+      const res = await getOrdersServer(filters, page);
+      setData(res);
     } catch {
       toast.error("تعذر تحميل الطلبات");
     } finally {
@@ -132,13 +132,11 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     if (firstLoad.current) {
       firstLoad.current = false;
-      fetch("/api/couriers")
-        .then((r) => (r.ok ? r.json() : { couriers: [] }))
-        .then((d: { couriers: CourierStatsDTO[] }) => setCouriers(d.couriers ?? []))
+      getCouriersServer()
+        .then((d) => setCouriers(d.couriers ?? []))
         .catch(() => {});
-      fetch("/api/blacklist")
-        .then((r) => (r.ok ? r.json() : { entries: [] }))
-        .then((d: { entries: BlacklistEntryDTO[] }) => {
+      getBlacklistServer()
+        .then((d) => {
           const map: Record<string, number> = {};
           for (const e of d.entries ?? []) map[e.phone] = e.strikes;
           setStrikesByPhone(map);
@@ -156,12 +154,7 @@ export default function AdminOrdersPage() {
 
   async function changeStatus(order: OrderDTO, status: string) {
     try {
-      const res = await fetch(`/api/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error();
+      await updateOrderStatusServer(order.id, status);
       toast.success(`الطلب #${order.orderNumber} ولّى ${STATUS_LABELS[status as OrderStatus]}`);
       await load();
     } catch {
@@ -173,14 +166,8 @@ export default function AdminOrdersPage() {
     if (!bulkStatus || selected.size === 0) return;
     setBulkBusy(true);
     try {
-      const res = await fetch("/api/orders/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selected), status: bulkStatus }),
-      });
-      const d = (await res.json()) as { changed?: number; error?: string };
-      if (!res.ok) throw new Error(d.error);
-      toast.success(`تبدّلو ${d.changed} طلبات`);
+      const res = await bulkUpdateStatusServer(Array.from(selected), bulkStatus);
+      toast.success(`تبدّلو ${res.changed} طلبات`);
       setSelected(new Set());
       setBulkStatus("");
       await load();
@@ -205,19 +192,24 @@ export default function AdminOrdersPage() {
     });
   }
 
-  function exportCsv() {
-    const p = new URLSearchParams();
-    if (selected.size > 0) {
-      p.set("ids", Array.from(selected).join(","));
-    } else {
-      if (filters.status !== "all") p.set("status", filters.status);
-      if (filters.city !== "all") p.set("city", filters.city);
-      if (filters.courierId !== "all") p.set("courierId", filters.courierId);
-      if (filters.phone.trim()) p.set("phone", filters.phone.trim());
-      if (filters.from) p.set("from", filters.from);
-      if (filters.to) p.set("to", filters.to);
+  async function exportCsv() {
+    try {
+      const exportIds = selected.size > 0 ? Array.from(selected) : undefined;
+      const exportFilters = selected.size > 0 ? undefined : filters;
+      
+      const { csv } = await exportOrdersCSVServer(exportIds, exportFilters);
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `orders_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      toast.error("تعذر تصدير الطلبات");
     }
-    window.location.href = `/api/orders/export?${p.toString()}`;
   }
 
   const totalPages = data?.totalPages ?? 1;
@@ -680,12 +672,7 @@ function EditOrderSheet({
       if (status !== order.status) body.status = status;
       if (status === "returned") body.returnReason = returnReason || null;
 
-      const res = await fetch(`/api/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error();
+      await updateOrderDetailsServer(order.id, body);
       toast.success("تسجل التغيير");
       onSaved();
     } catch {

@@ -19,19 +19,16 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { fmtDate, fmtMad, fmtPercent } from "@/lib/format";
 import type { KpisResponse } from "@/lib/types";
+import { getKpisServer } from "./actions";
 
 export default function AdminDashboardPage() {
   const [kpis, setKpis] = useState<KpisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/kpis")
-      .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json()).error ?? "خطأ");
-        return res.json() as Promise<KpisResponse>;
-      })
-      .then(setKpis)
-      .catch(() => setError("تعذر تحميل الأرقام"));
+    getKpisServer()
+      .then((data) => setKpis(data))
+      .catch((err) => setError("تعذر تحميل الإحصائيات"));
   }, []);
 
   if (error) {

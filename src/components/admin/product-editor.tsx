@@ -50,6 +50,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PRODUCT_ASSET_LIBRARY } from "@/lib/constants";
 import type { ProductDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { getProductServer, createProductServer, updateProductServer } from "@/app/admin/products/actions";
 
 interface ColorDraft {
   name: string;
@@ -140,10 +141,8 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       return;
     }
     try {
-      const res = await fetch("/api/admin/products");
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { products: ProductDTO[] };
-      const found = data.products.find((p) => p.id === productId);
+      const res = await getProductServer(productId);
+      const found = res.product;
       if (!found) {
         setError("المنتج غير موجود");
         return;
@@ -284,34 +283,26 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
     setSaving(true);
     try {
-      const res = await fetch(
-        isNew ? "/api/admin/products" : `/api/admin/products/${productId}`,
-        {
-          method: isNew ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-      const data = (await res.json().catch(() => ({}))) as {
-        product?: ProductDTO;
-        error?: string;
-      };
-      if (!res.ok) {
-        setError(data.error || "تعذر الحفظ");
-        toast.error(data.error || "تعذر الحفظ");
-        return;
+      let result;
+      if (isNew) {
+        result = await createProductServer(payload);
+      } else {
+        await updateProductServer(productId, payload);
+        result = { product: { ...payload, id: productId } as ProductDTO };
       }
+      
       toast.success(isNew ? "تزاد المنتج" : "تسجلت التغييرات — الصفحة الرئيسية تبدلت");
-      const d = dtoToDraft(data.product!);
+      const d = dtoToDraft(result.product!);
       setDraft(d);
       setOriginal(JSON.stringify(d));
-      if (isNew && data.product) {
-        router.replace(`/admin/products/${data.product.id}`);
+      
+      if (isNew && result.product) {
+        router.replace(`/admin/products/${result.product.id}`);
       } else {
         router.refresh();
       }
-    } catch {
-      setError("تعذر الاتصال بالسيرفر");
+    } catch (err: any) {
+      setError(err.message || "تعذر الاتصال بالسيرفر");
     } finally {
       setSaving(false);
     }

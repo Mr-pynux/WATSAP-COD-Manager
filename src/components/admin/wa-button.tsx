@@ -18,6 +18,8 @@ interface WaButtonProps {
  * WhatsApp deep-link button: POST /api/whatsapp → opens returned wa.me URL.
  * The API logs the click, increments attempts and switches no_answer → retry.
  */
+import { logWhatsAppAttemptServer } from "@/app/admin/orders/actions";
+
 export function WaButton({
   orderId,
   templateKey,
@@ -30,14 +32,9 @@ export function WaButton({
   async function onClick() {
     setLoading(true);
     try {
-      const res = await fetch("/api/whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, templateKey }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        toast.error(data.error || "وقع مشكل فواتساب");
+      const data = await logWhatsAppAttemptServer(orderId, templateKey);
+      if (!data.url) {
+        toast.error("وقع مشكل فواتساب");
         return;
       }
       window.open(data.url, "_blank");

@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProductDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { getProductsServer, updateProductServer, deleteProductServer } from "./actions";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductDTO[] | null>(null);
@@ -40,10 +41,8 @@ export default function ProductsPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/products");
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { products: ProductDTO[] };
-      setProducts(data.products);
+      const res = await getProductsServer();
+      setProducts(res.products);
     } catch {
       toast.error("تعذر تحميل المنتجات");
     }
@@ -56,26 +55,7 @@ export default function ProductsPage() {
   async function toggleActive(p: ProductDTO) {
     setTogglingId(p.id);
     try {
-      const res = await fetch(`/api/admin/products/${p.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: p.name,
-          imageUrls: p.imageUrls,
-          videoUrl: p.videoUrl,
-          description: p.description,
-          features: p.features,
-          priceMad: p.priceMad,
-          oldPriceMad: p.oldPriceMad,
-          offerQty: p.offerQty,
-          offerTotalMad: p.offerTotalMad,
-          costMad: p.costMad,
-          sizes: p.sizes,
-          colors: p.colors,
-          active: !p.active,
-        }),
-      });
-      if (!res.ok) throw new Error();
+      await updateProductServer(p.id, { active: !p.active });
       toast.success(!p.active ? "تنشّط المنتج — دابا كيبان فالصفحة الرئيسية" : "تطفّى المنتج");
       await load();
     } catch {
@@ -89,12 +69,7 @@ export default function ProductsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/products/${deleteTarget.id}`, { method: "DELETE" });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "تعذر حذف المنتج");
-        return;
-      }
+      await deleteProductServer(deleteTarget.id);
       toast.success("تحيد المنتج");
       setDeleteTarget(null);
       await load();
