@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // output: "standalone", // Removed for Vercel deployment
   allowedDevOrigins: ["https://*.space-z.ai", "http://localhost:81"],
   images: {
     remotePatterns: [
