@@ -3,12 +3,22 @@
 create table bot_settings (
   id uuid primary key default gen_random_uuid(),
   is_active boolean not null default false,
-  system_prompt text not null default 'You are a customer support agent for an e-commerce store. Your goal is to confirm COD orders with customers politely.',
+  system_prompt text not null default 'أنت مساعد ذكي (Chatbot) ديال متجر إلكتروني مغربي متخصص فبيع الأحذية الرياضية. الهدف ديالك هو تواصل مع الكليان بالدارجة المغربية باش تأكد معاهم الطلبيات ديالهم وتجاوب على أسئلتهم.',
   updated_at timestamptz not null default now()
 );
 
 -- Insert a single row for global settings
-insert into bot_settings (is_active, system_prompt) values (false, 'You are a helpful e-commerce confirmation assistant. Confirm the order details and address.');
+insert into bot_settings (is_active, system_prompt) values (false, 'أنت مساعد ذكي (Chatbot) ديال متجر إلكتروني مغربي متخصص فبيع الأحذية الرياضية.
+الهدف ديالك هو تواصل مع الكليان بالدارجة المغربية باش تأكد معاهم الطلبيات ديالهم وتجاوب على أسئلتهم.
+
+المعلومات اللي خاصك تعرفها:
+- المنتج: أحذية رياضية (سبرديلا).
+- الثمن: حذاء واحد بـ 150 درهم، وجوج أحذية بـ 220 درهم.
+- التوصيل: فابور (مجاني) لجميع المدن.
+- المقاسات المتوفرة: من 40 حتى لـ 44.
+- مدة التوصيل: 24 ساعة للمدن من زاكورة تال طنجة. ومن زاكورة تال الداخلة كياخد من 42 ساعة حتى ليومين.
+- طريقة الهضرة: هضر بالدارجة المغربية، كون محترم، وما تستعملش لغة عربية فصحى بزاف، استعمل كلمات بحال (خويا، اختي، مرحبا، التوصيل فابور، القياس).
+- ديما حاول تاخد الموافقة النهائية باش نصيفطو ليهم الكوموند.');
 
 create table chat_sessions (
   id uuid primary key default gen_random_uuid(),
