@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { toProductDTO } from "@/lib/serialize";
-import { LandingClient } from "@/components/public/landing-client";
+import { StoreClient } from "@/components/public/store-client";
 import { MetaPixel } from "@/components/meta-pixel";
 import type { ProductDTO } from "@/lib/types";
 import type { Product } from "@prisma/client";
@@ -43,17 +43,17 @@ function toDto(p: Product): ProductDTO {
 }
 
 export default async function Home() {
-  let product: ProductDTO = FALLBACK;
+  let products: ProductDTO[] = [FALLBACK];
   try {
-    const found = await db.product.findFirst({ where: { active: true } });
-    if (found) product = toDto(found);
+    const found = await db.product.findMany({ where: { active: true } });
+    if (found.length > 0) products = found.map(toDto);
   } catch {
     // DB not ready — fallback demo product
   }
 
   return (
     <>
-      <LandingClient product={product} />
+      <StoreClient products={products} />
       <MetaPixel />
     </>
   );

@@ -29,6 +29,7 @@ import {
   Maximize2,
   Play,
   RotateCw,
+  ArrowRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -83,12 +84,13 @@ type FormData = z.infer<typeof formSchema>;
 
 interface LandingClientProps {
   product: ProductDTO;
+  onBack?: () => void;
 }
 
 const FALLBACK_DESCRIPTION =
   "سنيكرز خفيف ومريح، صالح للاستعمال اليومي — والتوصيل فابور لجميع المدن، وكتخلص فقط ملي توصلك السلعة لباب دارك.";
 
-export function LandingClient({ product }: LandingClientProps) {
+export function LandingClient({ product, onBack }: LandingClientProps) {
   const router = useRouter();
   const { setTheme } = useTheme();
   const [color, setColor] = useState<string>(product.colors[0]?.name ?? "");
@@ -181,6 +183,16 @@ export function LandingClient({ product }: LandingClientProps) {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-stone-100">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
+            {onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onBack}
+                className="h-9 w-9 text-stone-600 hover:text-stone-950"
+              >
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+            )}
             <span className="bg-stone-950 rounded-xl px-2 py-1.5 flex items-center shrink-0">
               <Image
                 src="/logo.png"

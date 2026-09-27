@@ -1,5 +1,5 @@
 {
-  "project": "COD Order Manager - BACKEND + ADMIN (frontend landing page handled separately)",
+  "project": "COD Order Manager - BACKEND + ADMIN + FRONTEND + AI GOOGLE SHEETS SYNC",
   
   "operating_rules": [
     "Read this entire file before starting. Work PHASE BY PHASE.",
@@ -14,8 +14,10 @@
     "framework": "Next.js 15 App Router + TypeScript strict",
     "backend": "Supabase (@supabase/ssr) + Server Actions (no separate API needed)",
     "admin_ui": "shadcn/ui + Tailwind (dashboard pages)",
+    "frontend_ui": "Modern web design for product/color selection and order placement",
     "no_paid_apis": true,
-    "whatsapp": "wa.me deep links ONLY"
+    "whatsapp": "wa.me deep links ONLY",
+    "ai_sync": "AI Agent / Cron to sync Admin Dashboard inventory with Google Sheets every minute"
   },
 
   "env_vars_required": [
@@ -23,7 +25,10 @@
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY (server-only, never client)",
     "NEXT_PUBLIC_META_PIXEL_ID",
-    "NEXT_PUBLIC_SELLER_WHATSAPP"
+    "NEXT_PUBLIC_SELLER_WHATSAPP",
+    "GOOGLE_SHEETS_CLIENT_EMAIL",
+    "GOOGLE_SHEETS_PRIVATE_KEY",
+    "GOOGLE_SHEET_ID"
   ],
 
   "phone_rules": {
@@ -99,7 +104,9 @@
     "B3: Orders table UI + WhatsApp button + server actions + order_events",
     "B4: Followup queue + double-confirm + blacklist logic",
     "B5: CSV export + couriers + finance (ad spend + P&L)",
-    "B6: Templates editor + KPIs on /admin"
+    "B6: Templates editor + KPIs on /admin",
+    "F1: Frontend App (Model selection, color selection, user info form -> creates order)",
+    "A1: AI Google Sheets Sync (Cron job / Middleware to sync inventory every minute)"
   ]
 }
 
