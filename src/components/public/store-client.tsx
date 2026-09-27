@@ -70,11 +70,11 @@ export function StoreClient({ products }: StoreClientProps) {
                 <Badge className="hidden sm:inline-flex bg-brand/20 text-brand-strong border-brand/30 hover:bg-brand/30 px-3 py-1 text-sm font-bold">
                   توصيل مجاني + الدفع عند الاستلام
                 </Badge>
-                <Link href="/admin" aria-label="لوحة التحكم">
-                  <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-600 hover:text-stone-950">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-600 hover:text-stone-950" asChild>
+                  <Link href="/admin" aria-label="لوحة التحكم">
                     <UserCircle className="h-6 w-6" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             </div>
           </header>
