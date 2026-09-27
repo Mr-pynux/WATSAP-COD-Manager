@@ -210,11 +210,13 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
               <Banknote className="h-3.5 w-3.5" />
               الدفع عند الاستلام
             </Badge>
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-600 hover:text-stone-950" asChild>
-              <Link href="/admin" aria-label="لوحة التحكم">
-                <UserCircle className="h-6 w-6" />
-              </Link>
-            </Button>
+            <a 
+              href="/admin" 
+              aria-label="لوحة التحكم"
+              className="flex items-center justify-center h-9 w-9 text-stone-600 hover:text-stone-950 hover:bg-stone-100 rounded-md transition-colors"
+            >
+              <UserCircle className="h-6 w-6" />
+            </a>
           </div>
         </div>
       </header>
