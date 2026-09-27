@@ -30,6 +30,7 @@ import {
   Play,
   RotateCw,
   ArrowRight,
+  UserCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -204,10 +205,17 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
               />
             </span>
           </div>
-          <Badge className="bg-stone-950 text-brand border-stone-950 hover:bg-stone-950">
-            <Banknote className="h-3.5 w-3.5" />
-            الدفع عند الاستلام
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge className="hidden sm:inline-flex bg-stone-950 text-brand border-stone-950 hover:bg-stone-950">
+              <Banknote className="h-3.5 w-3.5" />
+              الدفع عند الاستلام
+            </Badge>
+            <Link href="/admin" aria-label="لوحة التحكم">
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-600 hover:text-stone-950">
+                <UserCircle className="h-6 w-6" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

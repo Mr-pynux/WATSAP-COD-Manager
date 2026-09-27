@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingBag, Star, ArrowRight } from "lucide-react";
+import { ShoppingBag, Star, ArrowRight, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,9 +66,16 @@ export function StoreClient({ products }: StoreClientProps) {
                   className="h-7 w-auto object-contain"
                 />
               </span>
-              <Badge className="bg-brand/20 text-brand-strong border-brand/30 hover:bg-brand/30 px-3 py-1 text-sm font-bold">
-                توصيل مجاني + الدفع عند الاستلام
-              </Badge>
+              <div className="flex items-center gap-3">
+                <Badge className="hidden sm:inline-flex bg-brand/20 text-brand-strong border-brand/30 hover:bg-brand/30 px-3 py-1 text-sm font-bold">
+                  توصيل مجاني + الدفع عند الاستلام
+                </Badge>
+                <Link href="/admin" aria-label="لوحة التحكم">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-600 hover:text-stone-950">
+                    <UserCircle className="h-6 w-6" />
+                  </Button>
+                </Link>
+              </div>
             </div>
           </header>
 
