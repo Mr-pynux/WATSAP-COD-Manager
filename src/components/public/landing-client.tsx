@@ -133,13 +133,13 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
     : 0;
 
   const availableSizes = useMemo(() => {
-    return product.sizes.filter((s) => {
-      if (!product.stockBySize) return true;
-      const stockVal = product.stockBySize[s];
-      const stockInt = parseInt(stockVal || "0", 10);
-      return !isNaN(stockInt) && stockInt > 0;
+    const allPossibleSizes = ["39", "40", "41", "42", "43", "44", "45"];
+    return allPossibleSizes.filter((s) => {
+      if (!product.stockBySize) return false;
+      const stockVal = String(product.stockBySize[s] || "").trim().toLowerCase();
+      return stockVal !== "" && stockVal !== "0" && stockVal !== "-";
     });
-  }, [product.sizes, product.stockBySize]);
+  }, [product.stockBySize]);
 
   function scrollToForm() {
     document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" });

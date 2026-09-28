@@ -122,7 +122,7 @@ export default function InventorySheetPage() {
               <th className="p-2 font-semibold text-muted-foreground text-center w-12">43</th>
               <th className="p-2 font-semibold text-muted-foreground text-center w-12">44</th>
               <th className="p-2 font-semibold text-muted-foreground text-center w-12">45</th>
-              <th className="p-3 font-semibold text-muted-foreground min-w-[120px]">المقاسات (عام)</th>
+
               <th className="p-3 font-semibold text-muted-foreground w-24 text-center">حفظ</th>
               <th className="p-3 font-semibold text-muted-foreground w-20 text-center">مفعل</th>
             </tr>
@@ -198,18 +198,6 @@ export default function InventorySheetPage() {
                   </td>
                 ))}
 
-                {/* Sizes General */}
-                <td className="p-2 align-middle">
-                  <Input 
-                    defaultValue={p.sizes.join(", ")}
-                    placeholder="مثال: 39, 40"
-                    onBlur={(e) => {
-                      const sizeArray = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                      updateField(p.id, "sizes", sizeArray);
-                    }}
-                    className="h-9 border-transparent hover:border-input focus:border-input bg-transparent ltr-num text-right"
-                  />
-                </td>
 
                 {/* Save Status Indicator */}
                 <td className="p-2 align-middle text-center text-muted-foreground">
