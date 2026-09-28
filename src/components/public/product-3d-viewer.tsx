@@ -13,6 +13,8 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { youtubeEmbed, youtubeId } from "@/lib/url";
+import Zoom from 'react-medium-image-zoom';
+import 'react-medium-image-zoom/dist/styles.css';
 
 interface MediaItem {
   type: "image" | "video";
@@ -140,15 +142,12 @@ export function Product3DViewer({
         }}
       />
       {/* floating product + reflection (outer wrapper floats, inner tilts) */}
-      <div className="absolute inset-0 flex items-center justify-center pb-8 pt-4 animate-float3d">
+      <div className="absolute inset-0 flex items-center justify-center">
         <div
-          className="relative w-[86%] h-[78%]"
+          className="relative w-full h-full"
           style={{
-            transform: `rotateX(${tilt.x}deg) rotateY(${
-              tilt.y + dragRotY
-            }deg) scale(${dragging ? 1.04 : 1})`,
+            transform: `rotateY(${dragRotY}deg)`,
             transition: dragging ? "none" : "transform 240ms ease-out",
-            transformStyle: "preserve-3d",
           }}
         >
           {isVideo ? (
@@ -172,46 +171,38 @@ export function Product3DViewer({
                 muted
                 loop
                 playsInline
-                className="absolute inset-0 w-full h-full object-contain drop-shadow-2xl rounded-xl"
+                className="absolute inset-0 w-full h-full object-cover rounded-xl"
               />
             )
           ) : (
             <>
               {media.map((m, i) =>
                 m.type === "image" ? (
-                  <img
+                  <div
                     key={m.src}
-                    src={m.src}
-                    alt={i === index ? `${name} — وجه ${i + 1}` : ""}
-                    draggable={false}
                     aria-hidden={i !== index}
                     className={cn(
-                      "absolute inset-0 w-full h-full object-contain select-none",
+                      "absolute inset-0 w-full h-full",
                       "transition-opacity duration-200",
-                      i === index ? "opacity-100 drop-shadow-2xl" : "opacity-0"
+                      i === index ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
                     )}
-                  />
+                  >
+                    <Zoom>
+                      <img
+                        src={m.src}
+                        alt={i === index ? `${name} — وجه ${i + 1}` : ""}
+                        draggable={false}
+                        className="w-full h-full object-cover select-none"
+                        style={{ aspectRatio: "1/1" }}
+                      />
+                    </Zoom>
+                  </div>
                 ) : null
-              )}
-              {/* glossy floor reflection */}
-              {current?.type === "image" && (
-                <img
-                  src={current.src}
-                  alt=""
-                  aria-hidden
-                  draggable={false}
-                  className="absolute inset-x-0 top-full w-full h-[55%] object-contain reflect-mask opacity-40 select-none pointer-events-none"
-                />
               )}
             </>
           )}
         </div>
       </div>
-      {/* floor shadow ellipse */}
-      <div
-        aria-hidden
-        className="absolute bottom-7 left-1/2 -translate-x-1/2 w-[62%] h-8 rounded-[100%] bg-black/55 blur-md"
-      />
     </>
   );
 

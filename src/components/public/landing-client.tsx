@@ -94,7 +94,6 @@ const FALLBACK_DESCRIPTION =
 export function LandingClient({ product, onBack }: LandingClientProps) {
   const router = useRouter();
   const { setTheme } = useTheme();
-  const [color, setColor] = useState<string>(product.colors[0]?.name ?? "");
   const [size, setSize] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
@@ -156,7 +155,6 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
           district: values.district || null,
           landmark: values.landmark || null,
           size,
-          color: color || null,
           quantity,
         }),
       });
@@ -175,8 +173,6 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
       setSubmitting(false);
     }
   }
-
-  const selectedColorHex = product.colors.find((c) => c.name === color)?.hex;
 
   return (
     <div className="bg-white text-stone-900 min-h-screen pb-24 md:pb-0">
@@ -339,34 +335,6 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
           <Card className="border-stone-200 shadow-sm">
             <CardContent className="p-5 md:p-8 space-y-6">
               <div className="space-y-3">
-                <p className="font-bold text-lg">
-                  اللون <span className="text-stone-500 font-normal text-sm">({color})</span>
-                </p>
-                <div className="flex gap-3">
-                  {product.colors.map((c) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => setColor(c.name)}
-                      aria-label={`اختر اللون ${c.name}`}
-                      aria-pressed={color === c.name}
-                      className={cn(
-                        "h-11 w-11 rounded-full border-2 flex items-center justify-center transition-all",
-                        color === c.name
-                          ? "border-brand-strong ring-2 ring-brand/50 scale-110"
-                          : "border-stone-200 hover:border-stone-300"
-                      )}
-                      style={{ backgroundColor: c.hex }}
-                    >
-                      {color === c.name && (
-                        <CheckCircle2 className="h-5 w-5 text-stone-950 mix-blend-difference" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-lg">
                     المقاس{" "}
@@ -504,19 +472,6 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                 <div className="flex justify-between">
                   <span className="text-stone-500">المقاس</span>
                   <span className="font-semibold ltr-num">{size || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">اللون</span>
-                  <span className="font-semibold">
-                    {color || "—"}
-                    {selectedColorHex && (
-                      <span
-                        className="inline-block h-3.5 w-3.5 rounded-full border border-stone-300 ms-2 align-middle"
-                        style={{ backgroundColor: selectedColorHex }}
-                        aria-hidden="true"
-                      />
-                    )}
-                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">الكمية</span>
