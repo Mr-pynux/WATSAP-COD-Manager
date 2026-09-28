@@ -623,7 +623,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   id="p-name"
                   value={draft.name}
                   onChange={(e) => set({ name: e.target.value })}
-                  placeholder="مثلا: سنيكرز ShoeSpot Urban"
+                  placeholder="مثلا: سنيكرز ShoeSpot"
                   className="font-bold"
                 />
               </div>

@@ -1,4 +1,4 @@
-# COD Order Manager - Backend + Admin
+# ShoeSpot COD Manager
 
 ## Setup Steps
 

@@ -16,7 +16,7 @@ const FALLBACK_IMAGES = [
 
 const FALLBACK: ProductDTO = {
   id: "",
-  name: "حذاء رياضي Urban Step",
+  name: "حذاء رياضي ShoeSpot",
   imageUrls: FALLBACK_IMAGES,
   videoUrl: null,
   description:

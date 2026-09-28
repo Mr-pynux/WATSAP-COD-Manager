@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 export const metadata: Metadata = {
   title: "ShoeSpot — الدفع عند الاستلام",
   description:
-    "ستاييل كيكس — حذاء رياضي Urban Step بالدفع عند الاستلام، توصيل 24-48 ساعة لجميع المدن المغربية، وتبديل مجاني للمقاس.",
+    "ShoeSpot — حذاء رياضي بالدفع عند الاستلام، توصيل 24-48 ساعة لجميع المدن المغربية، وتبديل مجاني للمقاس.",
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
