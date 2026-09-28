@@ -132,6 +132,15 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
     ? Math.round((1 - product.priceMad / product.oldPriceMad) * 100)
     : 0;
 
+  const availableSizes = useMemo(() => {
+    return product.sizes.filter((s) => {
+      if (!product.stockBySize) return true;
+      const stockVal = product.stockBySize[s];
+      const stockInt = parseInt(stockVal || "0", 10);
+      return !isNaN(stockInt) && stockInt > 0;
+    });
+  }, [product.sizes, product.stockBySize]);
+
   function scrollToForm() {
     document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" });
   }
@@ -378,7 +387,10 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                   </Dialog>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {product.sizes.map((s) => (
+                  {availableSizes.length === 0 ? (
+                    <p className="text-sm text-rose-500 font-bold">المنتج غير متوفر حالياً بالمقاسات.</p>
+                  ) : (
+                    availableSizes.map((s) => (
                     <button
                       key={s}
                       type="button"
@@ -397,7 +409,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                     >
                       <span className="ltr-num">{s}</span>
                     </button>
-                  ))}
+                  )))}
                 </div>
               </div>
 

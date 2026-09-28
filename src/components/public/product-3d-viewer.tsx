@@ -171,7 +171,7 @@ export function Product3DViewer({
                 muted
                 loop
                 playsInline
-                className="absolute inset-0 w-full h-full object-cover rounded-xl"
+                className="absolute inset-0 w-full h-full object-contain rounded-xl bg-stone-100"
               />
             )
           ) : (
@@ -192,8 +192,8 @@ export function Product3DViewer({
                         src={m.src}
                         alt={i === index ? `${name} — وجه ${i + 1}` : ""}
                         draggable={false}
-                        className="w-full h-full object-cover select-none"
-                        style={{ aspectRatio: "1/1" }}
+                        className="w-full h-full object-contain select-none bg-stone-100"
+                        style={{ aspectRatio: "4/5" }}
                       />
                     </Zoom>
                   </div>
@@ -241,7 +241,7 @@ export function Product3DViewer({
         }}
         style={{ perspective: "1100px", touchAction: "pan-y" }}
         className={cn(
-          "relative aspect-square md:aspect-[4/3] rounded-3xl overflow-hidden",
+          "relative aspect-[4/5] md:aspect-[4/5] rounded-3xl overflow-hidden",
           "bg-gradient-to-b from-stone-900 via-stone-950 to-black",
           "border border-stone-800 ring-1 ring-white/5",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/70",
