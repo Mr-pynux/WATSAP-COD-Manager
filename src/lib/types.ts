@@ -20,6 +20,7 @@ export interface ProductDTO {
   sizes: string[];
   colors: ProductColor[];
   active: boolean;
+  stockBySize?: Record<string, string>;
 }
 
 export interface CourierDTO {

@@ -31,6 +31,7 @@ export async function getProductsServer(): Promise<{ products: ProductDTO[] }> {
     sizes: row.sizes || [],
     colors: row.colors || [],
     active: row.active,
+    stockBySize: row.stock_by_size || {},
   })) as ProductDTO[];
 
   return { products };
@@ -53,6 +54,7 @@ export async function updateProductServer(id: string, product: Partial<ProductDT
   if (product.sizes !== undefined) updates.sizes = product.sizes;
   if (product.colors !== undefined) updates.colors = product.colors;
   if (product.active !== undefined) updates.active = product.active;
+  if (product.stockBySize !== undefined) updates.stock_by_size = product.stockBySize;
 
   const { error } = await supabase.from("products").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
@@ -85,6 +87,7 @@ export async function getProductServer(id: string): Promise<{ product: ProductDT
     sizes: data.sizes || [],
     colors: data.colors || [],
     active: data.active,
+    stockBySize: data.stock_by_size || {},
   } as ProductDTO;
 
   return { product };
@@ -107,6 +110,7 @@ export async function createProductServer(product: Partial<ProductDTO>) {
     sizes: product.sizes,
     colors: product.colors,
     active: product.active ?? true,
+    stock_by_size: product.stockBySize ?? {},
   };
 
   const { data, error } = await supabase.from("products").insert(insertData).select().single();
@@ -129,6 +133,7 @@ export async function createProductServer(product: Partial<ProductDTO>) {
       sizes: data.sizes || [],
       colors: data.colors || [],
       active: data.active,
+      stockBySize: data.stock_by_size || {},
     } as ProductDTO
   };
 }
