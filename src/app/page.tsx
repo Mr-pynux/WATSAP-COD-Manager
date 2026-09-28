@@ -34,6 +34,7 @@ const FALLBACK: ProductDTO = {
     { name: "بيج", hex: "#d6c8b5" },
   ],
   active: true,
+  stockBySize: { "39": "5", "40": "5", "41": "5", "42": "5", "43": "5", "44": "5", "45": "5" },
 };
 
 export default async function Home() {
@@ -62,6 +63,7 @@ export default async function Home() {
         sizes: row.sizes || [],
         colors: row.colors || [],
         active: row.active,
+        stockBySize: row.stock_by_size || {},
       })) as ProductDTO[];
     }
   } catch {
