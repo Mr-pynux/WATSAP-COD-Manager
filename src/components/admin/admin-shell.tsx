@@ -20,6 +20,7 @@ import {
   Sun,
   BarChart3,
   Bot,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,8 @@ const NAV = [
   { href: "/admin/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/admin/followup", label: "المتابعة", icon: PhoneCall, badge: true },
   { href: "/admin/finance", label: "المالية", icon: Wallet },
-  { href: "/admin/products", label: "المنتجات", icon: Package, more: true },
+  { href: "/admin/inventory", label: "شيت المخزون", icon: FileSpreadsheet, more: true },
+  { href: "/admin/products", label: "المنتجات (كروت)", icon: Package, more: true },
   { href: "/admin/blacklist", label: "البلاك ليست", icon: Ban, more: true },
   { href: "/admin/couriers", label: "الناقلين", icon: Truck, more: true },
   { href: "/admin/templates", label: "قوالب الرسائل", icon: MessageSquareText, more: true },

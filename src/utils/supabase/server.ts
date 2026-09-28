@@ -27,3 +27,10 @@ export async function createClient() {
     }
   )
 }
+
+export async function verifyAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  return supabase;
+}

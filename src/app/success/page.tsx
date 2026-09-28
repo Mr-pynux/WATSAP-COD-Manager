@@ -128,22 +128,6 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
         </p>
 
         <div className="space-y-3 pt-2">
-          <Button
-            asChild
-            size="lg"
-            className="w-full h-12 bg-wa text-wa-foreground hover:bg-wa/90"
-          >
-            <a href={waUrl} target="_blank" rel="noopener noreferrer">
-              <MessageCircle className="h-5 w-5" />
-              أرسل الطلب ديالك للبائع فواتساب
-            </a>
-          </Button>
-
-          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-            <Phone className="h-3 w-3" />
-            كتصل على الزر كيتفتح واتساب والطلب كامل مكتوب — غير صيفط
-          </p>
-
           <Button asChild variant="outline" size="lg" className="w-full h-12">
             <Link href="/">
               <ArrowRight className="h-5 w-5" />

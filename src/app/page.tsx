@@ -1,9 +1,7 @@
-import { db } from "@/lib/db";
-import { toProductDTO } from "@/lib/serialize";
+import { createClient } from "@/utils/supabase/server";
 import { StoreClient } from "@/components/public/store-client";
 import { MetaPixel } from "@/components/meta-pixel";
 import type { ProductDTO } from "@/lib/types";
-import type { Product } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +36,34 @@ const FALLBACK: ProductDTO = {
   active: true,
 };
 
-function toDto(p: Product): ProductDTO {
-  return toProductDTO(p);
-}
-
 export default async function Home() {
   let products: ProductDTO[] = [FALLBACK];
   try {
-    const found = await db.product.findMany({ where: { active: true } });
-    if (found.length > 0) products = found.map(toDto);
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      products = data.map((row) => ({
+        id: row.id,
+        name: row.name,
+        imageUrls: row.image_urls || [],
+        videoUrl: row.video_url,
+        description: row.description,
+        features: row.features || [],
+        priceMad: row.price_mad,
+        oldPriceMad: row.old_price_mad,
+        offerQty: row.offer_qty,
+        offerTotalMad: row.offer_total_mad,
+        costMad: row.cost_mad,
+        sizes: row.sizes || [],
+        colors: row.colors || [],
+        active: row.active,
+      })) as ProductDTO[];
+    }
   } catch {
     // DB not ready — fallback demo product
   }
