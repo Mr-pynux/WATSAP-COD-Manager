@@ -428,7 +428,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setQuantity((q) => Math.min(3, q + 1))}
+                    onClick={() => setQuantity((q) => Math.min(10, q + 1))}
                     aria-label="زد الكمية"
                     className="h-11 w-11 rounded-xl border-2 border-stone-200 flex items-center justify-center hover:border-stone-300"
                   >
@@ -439,7 +439,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                       ? `الوحدة ${Math.round(product.priceMad)} درهم — ${
                           product.offerQty === 2 ? "زوج" : product.offerQty
                         } بـ${Math.round(product.offerTotalMad ?? 0)} درهم`
-                      : "(الحد الأقصى 3 فالطلب الواحد)"}
+                      : "(الحد الأقصى 10 فالطلب الواحد)"}
                   </span>
                 </div>
               </div>
