@@ -76,7 +76,7 @@ const formSchema = z.object({
     .string()
     .trim()
     .refine((v) => MA_PHONE_REGEX.test(v), "رقم الهاتف خاصو يكون 06 ولا 07 + 8 أرقام"),
-  city: z.string().min(1, "اختر المدينة"),
+  city: z.string().trim().min(2, "المرجو كتابة اسم المدينة"),
   district: z.string().optional(),
   landmark: z.string().optional(),
   paymentMethod: z.enum(["cod", "paypal", "rib"]).default("cod"),
@@ -575,21 +575,13 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
 
                   <div className="space-y-2">
                     <Label htmlFor="city">المدينة *</Label>
-                    <Select
-                      value={watch("city")}
-                      onValueChange={(v) => setValue("city", v, { shouldValidate: true })}
-                    >
-                      <SelectTrigger id="city" className="h-12">
-                        <SelectValue placeholder="اختر المدينة" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {MOROCCAN_CITIES.map((city) => (
-                          <SelectItem key={city} value={city}>
-                            {city}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="city"
+                      placeholder="مثلا: الدار البيضاء"
+                      className="h-12"
+                      aria-invalid={!!errors.city}
+                      {...register("city")}
+                    />
                     {errors.city && (
                       <p className="text-sm text-rose-600">{errors.city.message}</p>
                     )}
@@ -672,6 +664,15 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                         </div>
                       </button>
                     </div>
+                    {watch("paymentMethod") !== "cod" && (
+                      <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-start gap-2 text-sm mt-3">
+                        <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600" />
+                        <div>
+                          <p className="font-bold">ضمان الدفع المسبق:</p>
+                          <p className="leading-relaxed">يشمل خدمات التبديل وإرجاع المال داخل ظرف 48 ساعة في حال كان في الحذاء عيب ما.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

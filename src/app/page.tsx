@@ -25,7 +25,7 @@ const FALLBACK: ProductDTO = {
   priceMad: 150,
   oldPriceMad: null,
   offerQty: 2,
-  offerTotalMad: 220,
+  offerTotalMad: 240,
   costMad: 85,
   sizes: ["39", "40", "41", "42", "43", "44", "45"],
   colors: [
