@@ -159,9 +159,14 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
             </p>
           </div>
         ) : (
-          <p className="text-muted-foreground text-lg leading-relaxed">
-            دغيا غادي يتصل بيك البائع على واتساب باش يأكد الطلب معاك
-          </p>
+          <div className="space-y-2">
+            <p className="text-muted-foreground text-lg leading-relaxed font-semibold">
+              دغيا غادي يتصل بيك البائع على واتساب باش يأكد الطلب معاك
+            </p>
+            <p className="text-stone-500 text-sm">
+              فترة تأكيد الطلبيات كتمتد من ورا الظهر حتى لصلاة العصر، المرجو الانتباه لهاتفك!
+            </p>
+          </div>
         )}
 
         <div className="space-y-3 pt-2">
