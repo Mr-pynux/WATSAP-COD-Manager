@@ -107,9 +107,9 @@ export function StoreClient({ products }: StoreClientProps) {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
                       />
-                      {p.offerQty && (
+                      {p.offerQty && p.offerTotalMad && (
                         <div className="absolute top-3 end-3 bg-brand-strong text-stone-950 font-bold px-3 py-1 rounded-full text-xs shadow-md">
-                          عرض خاص
+                          عرض خاص: {p.offerQty} بـ {Math.round(p.offerTotalMad)} درهم
                         </div>
                       )}
                     </div>
