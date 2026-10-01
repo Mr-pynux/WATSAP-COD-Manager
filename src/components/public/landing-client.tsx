@@ -216,8 +216,8 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
           </div>
           <div className="flex items-center gap-3">
             <Badge className="hidden sm:inline-flex bg-stone-950 text-brand border-stone-950 hover:bg-stone-950">
-              <Banknote className="h-3.5 w-3.5" />
-              الدفع عند الاستلام
+              <Truck className="h-3.5 w-3.5" />
+              توصيل سريع ومجاني
             </Badge>
             <a 
               href="/admin" 
@@ -288,7 +288,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
               className="w-full md:w-auto h-14 text-lg font-extrabold gap-2 shadow-lg shadow-brand/30"
             >
               <ShoppingBag className="h-5 w-5" />
-              اطلب دابا — الدفع عند الاستلام
+              اطلب دابا
             </Button>
           </div>
 
@@ -314,9 +314,9 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-6">
           {[
             {
-              icon: Banknote,
-              title: "الدفع عند الاستلام",
-              text: "كتخلص فقط ملي توصلك السلعة",
+              icon: Star,
+              title: "جودة عالية",
+              text: "أحذية رياضية مصممة لراحتك",
             },
             {
               icon: Truck,
@@ -698,7 +698,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
         <section className="py-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-950 rounded-2xl p-4 border border-stone-800">
             {[
-              { icon: Banknote, text: "الدفع عند الاستلام" },
+              { icon: Star, text: "جودة عالية" },
               { icon: Truck, text: "التوصيل فابور" },
             ].map((t) => (
               <div key={t.text} className="flex items-center justify-center gap-2 py-2">
@@ -761,7 +761,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
             <Image src="/logo.png" alt="ShoeSpot" width={96} height={66} className="h-8 w-auto" />
           </span>
           <p className="text-stone-400 text-sm">
-            © 2026 ShoeSpot — الدفع عند الاستلام فجميع المغرب
+            © 2026 ShoeSpot — توصيل سريع لجميع مدن المغرب
           </p>
           <Link
             href="/login"

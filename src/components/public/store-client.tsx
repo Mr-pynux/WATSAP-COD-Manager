@@ -68,7 +68,7 @@ export function StoreClient({ products }: StoreClientProps) {
               </span>
               <div className="flex items-center gap-3">
                 <Badge className="hidden sm:inline-flex bg-brand/20 text-brand-strong border-brand/30 hover:bg-brand/30 px-3 py-1 text-sm font-bold">
-                  توصيل مجاني + الدفع عند الاستلام
+                  توصيل مجاني لجميع المدن
                 </Badge>
                 <a 
                   href="/admin" 
@@ -87,7 +87,7 @@ export function StoreClient({ products }: StoreClientProps) {
                 اختار الموديل لي يناسبك
               </h1>
               <p className="text-lg text-stone-600 max-w-2xl mx-auto">
-                اكتشف تشكيلتنا الجديدة من الأحذية الرياضية العالية الجودة. الدفع عند الاستلام والتوصيل بالمجان!
+                اكتشف تشكيلتنا الجديدة من الأحذية الرياضية العالية الجودة. توصيل سريع ومجاني لجميع المدن!
               </p>
             </div>
 

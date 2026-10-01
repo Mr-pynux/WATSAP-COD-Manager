@@ -4,9 +4,9 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "ShoeSpot — الدفع عند الاستلام",
+  title: "ShoeSpot — أحذية رياضية بجودة عالية",
   description:
-    "ShoeSpot — حذاء رياضي بالدفع عند الاستلام، توصيل 24-48 ساعة لجميع المدن المغربية، وتبديل مجاني للمقاس.",
+    "ShoeSpot — حذاء رياضي، توصيل 24-48 ساعة لجميع المدن المغربية.",
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
