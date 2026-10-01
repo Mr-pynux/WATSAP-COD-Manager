@@ -311,7 +311,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
         </section>
 
         {/* ── 3. Benefits row ─────────────────────────── */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6">
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-6">
           {[
             {
               icon: Banknote,
@@ -322,11 +322,6 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
               icon: Truck,
               title: "التوصيل فابور",
               text: "لجميع المدن المغربية — 24-48 ساعة",
-            },
-            {
-              icon: RefreshCw,
-              title: "تبديل مجاني",
-              text: "المقاس ماجاكش؟ نبدلوهولك بلا فلوس",
             },
           ].map((b) => (
             <Card key={b.title} className="border-stone-200 shadow-sm hover:shadow-md transition-shadow">
@@ -701,10 +696,9 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
 
         {/* ── 6. Trust strip (dark, logo-style) ───────── */}
         <section className="py-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-950 rounded-2xl p-4 border border-stone-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-950 rounded-2xl p-4 border border-stone-800">
             {[
               { icon: Banknote, text: "الدفع عند الاستلام" },
-              { icon: RefreshCw, text: "تبديل مجاني للمقاس" },
               { icon: Truck, text: "التوصيل فابور" },
             ].map((t) => (
               <div key={t.text} className="flex items-center justify-center gap-2 py-2">
