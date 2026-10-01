@@ -5,7 +5,7 @@ import { MA_PHONE_REGEX } from "@/lib/phone";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { productId, name, phone, city, district, landmark, size, color, quantity } = body;
+    const { productId, name, phone, city, district, landmark, size, color, quantity, paymentMethod } = body;
 
     if (!name || !phone || !city || !size || !productId) {
       return NextResponse.json({ error: "معلومات ناقصة" }, { status: 400 });
@@ -44,7 +44,8 @@ export async function POST(req: Request) {
         size,
         color: color || null,
         quantity: quantity || 1,
-        unit_price_mad: product.price_mad,
+        unit_price_mad: paymentMethod !== "cod" ? product.price_mad - 10 : product.price_mad,
+        payment_method: paymentMethod || "cod",
         status: "new",
       })
       .select("id, order_number")

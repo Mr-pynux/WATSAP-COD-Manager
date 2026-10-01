@@ -50,6 +50,7 @@ model Order {
   tracking      String?
   notes         String?
   returnReason  String?
+  paymentMethod String        @default("cod") // cod | paypal | rib
   createdAt     DateTime      @default(now())
   confirmedAt   DateTime?
   shippedAt     DateTime?

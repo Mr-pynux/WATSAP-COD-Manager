@@ -79,6 +79,7 @@ const formSchema = z.object({
   city: z.string().min(1, "اختر المدينة"),
   district: z.string().optional(),
   landmark: z.string().optional(),
+  paymentMethod: z.enum(["cod", "paypal", "rib"]).default("cod"),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -113,7 +114,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", phone: "", city: "", district: "", landmark: "" },
+    defaultValues: { name: "", phone: "", city: "", district: "", landmark: "", paymentMethod: "cod" },
   });
 
   const phoneValue = watch("phone") ?? "";
@@ -126,7 +127,9 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
   const description = product.description || FALLBACK_DESCRIPTION;
   const regularTotal = product.priceMad * quantity;
   const discountMad = orderDiscount(quantity, product);
-  const total = orderTotal(quantity, product.priceMad, discountMad);
+  const baseTotal = orderTotal(quantity, product.priceMad, discountMad);
+  const paymentMethod = watch("paymentMethod") || "cod";
+  const total = paymentMethod !== "cod" ? baseTotal - 10 : baseTotal;
   const hasOffer = !!product.offerQty && !!product.offerTotalMad;
   const oldDiscount = product.oldPriceMad
     ? Math.round((1 - product.priceMad / product.oldPriceMad) * 100)
@@ -165,6 +168,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
           landmark: values.landmark || null,
           size,
           quantity,
+          paymentMethod: values.paymentMethod,
         }),
       });
       const data = (await res.json()) as { orderNumber?: number; error?: string };
@@ -505,7 +509,13 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                     <span className="text-stone-900 text-sm font-semibold">
                       وفّرت {Math.round(discountMad)} درهم مع عرض الزوج
                     </span>
-                    <span className="text-stone-400 text-sm">الدفع عند الاستلام</span>
+                    <span className="text-stone-400 text-sm">تخفيض إضافي</span>
+                  </div>
+                )}
+                {paymentMethod !== "cod" && (
+                  <div className="flex justify-between text-green-600 font-semibold text-sm">
+                    <span>خصم الدفع المسبق ({paymentMethod === "paypal" ? "PayPal" : "تحويل بنكي"})</span>
+                    <span className="ltr-num">-10 درهم</span>
                   </div>
                 )}
               </div>
@@ -604,6 +614,65 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                       {...register("landmark")}
                     />
                   </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>طريقة الدفع *</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setValue("paymentMethod", "cod", { shouldValidate: true })}
+                        className={cn(
+                          "p-4 rounded-xl border-2 text-center transition-all",
+                          watch("paymentMethod") === "cod"
+                            ? "border-brand bg-brand/10 text-stone-950"
+                            : "border-stone-200 text-stone-600 hover:border-brand/50"
+                        )}
+                      >
+                        <div className="font-bold text-lg">عند الاستلام</div>
+                        <div className="text-xs text-stone-500 mt-1 font-semibold">
+                          تخلص ملي توصلك السلعة
+                        </div>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setValue("paymentMethod", "paypal", { shouldValidate: true })}
+                        className={cn(
+                          "p-4 rounded-xl border-2 text-center transition-all relative",
+                          watch("paymentMethod") === "paypal"
+                            ? "border-brand bg-brand/10 text-stone-950"
+                            : "border-stone-200 text-stone-600 hover:border-brand/50"
+                        )}
+                      >
+                        <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-brand text-stone-950 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+                          وفر 10 دراهم
+                        </div>
+                        <div className="font-bold text-lg">PayPal</div>
+                        <div className="text-xs text-stone-500 mt-1 font-semibold">
+                          دفع آمن ومسبق
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setValue("paymentMethod", "rib", { shouldValidate: true })}
+                        className={cn(
+                          "p-4 rounded-xl border-2 text-center transition-all relative",
+                          watch("paymentMethod") === "rib"
+                            ? "border-brand bg-brand/10 text-stone-950"
+                            : "border-stone-200 text-stone-600 hover:border-brand/50"
+                        )}
+                      >
+                        <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-brand text-stone-950 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+                          وفر 10 دراهم
+                        </div>
+                        <div className="font-bold text-lg">تحويل بنكي</div>
+                        <div className="text-xs text-stone-500 mt-1 font-semibold">
+                          Virement / RIB
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <Button
@@ -620,7 +689,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                   ) : (
                     <>
                       <ShieldCheck className="h-5 w-5" />
-                      أكد الطلب — {Math.round(total)} درهم عند الاستلام
+                      أكد الطلب — {Math.round(total)} درهم {watch("paymentMethod") === "cod" ? "عند الاستلام" : "مسبقاً"}
                     </>
                   )}
                 </Button>

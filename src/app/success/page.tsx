@@ -37,6 +37,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
     quantity: number;
     unitPriceMad: number;
     discountMad: number;
+    paymentMethod: string;
     product: { name: string };
   };
   const orderNo = n && !Number.isNaN(Number(n)) ? Number(n) : null;
@@ -61,7 +62,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
     order ? `المنتج: ${order.product.name}` : null,
     order ? `المقاس: ${order.size}${order.color ? ` | اللون: ${order.color}` : ""}` : null,
     order ? `الكمية: ${order.quantity}` : null,
-    total ? `المجموع: ${total} درهم (الدفع عند الاستلام + التوصيل فابور)` : null,
+    total ? `المجموع: ${total} درهم (${order?.paymentMethod === "cod" ? "الدفع عند الاستلام" : order?.paymentMethod === "paypal" ? "دفع مسبق عبر PayPal" : "دفع مسبق عبر تحويل بنكي"})` : null,
     order ? `الزبون: ${order.customerName}` : null,
     order ? `الهاتف: ${order.phone}` : null,
     order
@@ -118,14 +119,50 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
               <span className="font-bold text-emerald-700 dark:text-emerald-400 ltr-num">
                 {total} درهم
               </span>
-              <span className="text-muted-foreground">— الدفع عند الاستلام</span>
+              <span className="text-muted-foreground">— {order.paymentMethod === "cod" ? "الدفع عند الاستلام" : order.paymentMethod === "paypal" ? "دفع عبر PayPal" : "تحويل بنكي"}</span>
             </div>
           </div>
         )}
 
-        <p className="text-muted-foreground text-lg leading-relaxed">
-          دغيا غادي يتصل بيك البائع على واتساب باش يأكد الطلب معاك
-        </p>
+        {order?.paymentMethod === "paypal" ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-center space-y-4 shadow-sm">
+            <h3 className="text-xl font-bold text-blue-800">خطوة أخيرة لتأكيد الطلب!</h3>
+            <p className="text-blue-700 text-sm font-semibold">
+              المرجو إرسال مبلغ <span className="ltr-num font-bold bg-blue-100 px-1 rounded">{total} درهم</span> عبر الرابط أسفله لتأكيد الطلب والاستفادة من الخصم:
+            </p>
+            <Button asChild className="w-full bg-[#0070ba] hover:bg-[#003087] text-white font-bold h-12 shadow-md">
+              <a href={`https://paypal.me/AyoubZiani959/${total}`} target="_blank" rel="noopener noreferrer">
+                ادفع الآن عبر PayPal
+              </a>
+            </Button>
+            <p className="text-xs text-blue-600/80">
+              بعد الدفع، سنتصل بك مباشرة عبر الواتساب لتأكيد الإرسال.
+            </p>
+          </div>
+        ) : order?.paymentMethod === "rib" ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center space-y-4 shadow-sm">
+            <h3 className="text-xl font-bold text-emerald-800">خطوة أخيرة لتأكيد الطلب!</h3>
+            <p className="text-emerald-700 text-sm font-semibold">
+              المرجو تحويل مبلغ <span className="ltr-num font-bold bg-emerald-100 px-1 rounded">{total} درهم</span> إلى الحساب البنكي التالي:
+            </p>
+            <div className="bg-white p-3 rounded-lg border border-emerald-100 space-y-2">
+              <p className="text-xs text-stone-500 font-semibold">رقم الحساب (RIB)</p>
+              <p className="font-mono text-lg font-bold tracking-wider ltr-num select-all">230 780 6181229211002400 90</p>
+            </div>
+            <Button asChild className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 shadow-md">
+              <a href={waUrl} target="_blank" rel="noopener noreferrer">
+                إرسال وصل الدفع عبر الواتساب
+              </a>
+            </Button>
+            <p className="text-xs text-emerald-600/80 font-medium">
+              بمجرد إرسال وصل الدفع (Reçu) في الواتساب، سيتم شحن طلبك فوراً!
+            </p>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-lg leading-relaxed">
+            دغيا غادي يتصل بيك البائع على واتساب باش يأكد الطلب معاك
+          </p>
+        )}
 
         <div className="space-y-3 pt-2">
           <Button asChild variant="outline" size="lg" className="w-full h-12">
