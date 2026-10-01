@@ -104,7 +104,7 @@ const NEW_DRAFT: Draft = {
   cost: "",
   offerEnabled: true,
   offerQty: "2",
-  offerTotal: "220",
+  offerTotal: "240",
   sizes: "39، 40، 41، 42، 43، 44، 45",
   colors: [
     { name: "أبيض", hex: "#f5f5f4" },
@@ -779,7 +779,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                         inputMode="decimal"
                         value={draft.offerTotal}
                         onChange={(e) => set({ offerTotal: e.target.value })}
-                        placeholder="مثلا: 220"
+                        placeholder="مثلا: 240"
                         className="ltr-num"
                       />
                     </div>
