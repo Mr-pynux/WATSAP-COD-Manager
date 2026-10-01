@@ -267,6 +267,18 @@ export async function bulkUpdateStatusServer(ids: string[], status: string) {
   return { success: true, changed: ids.length };
 }
 
+export async function bulkDeleteOrdersServer(ids: string[]) {
+  const supabase = await verifyAdmin();
+  
+  // order_events might have a foreign key constraint referencing orders
+  await supabase.from("order_events").delete().in("order_id", ids);
+  
+  const { error } = await supabase.from("orders").delete().in("id", ids);
+  if (error) throw new Error(error.message);
+
+  return { success: true, deleted: ids.length };
+}
+
 export async function logWhatsAppAttemptServer(orderId: string, templateKey?: string) {
   const supabase = await verifyAdmin();
   

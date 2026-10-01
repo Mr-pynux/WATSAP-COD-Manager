@@ -58,7 +58,7 @@ import {
 import { fmtDate, toDateInput } from "@/lib/format";
 import type { OrderDTO, OrdersResponse, BlacklistEntryDTO, CourierStatsDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer } from "./actions";
+import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer, bulkDeleteOrdersServer } from "./actions";
 
 interface Filters {
   status: string;
@@ -173,6 +173,22 @@ export default function AdminOrdersPage() {
       await load();
     } catch {
       toast.error("تعذر التحديث الجماعي");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function deleteBulk() {
+    if (selected.size === 0) return;
+    if (!confirm("واش متأكد بغيتي تحذف هاد الطلبات؟ (هاد العملية ما يمكنش تراجع عليها)")) return;
+    setBulkBusy(true);
+    try {
+      const res = await bulkDeleteOrdersServer(Array.from(selected));
+      toast.success(`تحذفو ${res.deleted} طلبات`);
+      setSelected(new Set());
+      await load();
+    } catch {
+      toast.error("تعذر حذف الطلبات");
     } finally {
       setBulkBusy(false);
     }
@@ -354,6 +370,15 @@ export default function AdminOrdersPage() {
             >
               {bulkBusy && <Loader2 className="h-4 w-4 animate-spin" />}
               تطبيق على المختارين
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={deleteBulk}
+              disabled={bulkBusy}
+            >
+              حذف الطلبات
             </Button>
             <Button
               variant="ghost"
