@@ -4,14 +4,14 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // We use the service role key to bypass RLS in webhooks
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY!.trim()
 );
 
 // Basic function to mark message as read
 async function markMessageAsRead(messageId: string) {
-  const token = process.env.WHATSAPP_API_TOKEN;
-  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   if (!token || !phone_number_id) return;
 
   try {
@@ -34,8 +34,8 @@ async function markMessageAsRead(messageId: string) {
 
 // Function to send an image via WhatsApp
 async function sendWhatsAppImage(to: string, imageUrl: string, caption?: string) {
-  const token = process.env.WHATSAPP_API_TOKEN;
-  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
 
   if (!token || !phone_number_id) {
     console.error("Missing WhatsApp configuration");
@@ -74,8 +74,8 @@ async function sendWhatsAppImage(to: string, imageUrl: string, caption?: string)
 
 // Basic function to send a WhatsApp text message
 async function sendWhatsAppMessage(to: string, text: string) {
-  const token = process.env.WHATSAPP_API_TOKEN;
-  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
 
   if (!token || !phone_number_id) {
     console.error("Missing WhatsApp configuration");
@@ -108,7 +108,7 @@ async function sendWhatsAppMessage(to: string, text: string) {
   }
 }
 
-const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "watsap_cod_token";
+const VERIFY_TOKEN = (process.env.META_VERIFY_TOKEN || "watsap_cod_token").trim();
 
 export async function GET(req: NextRequest) {
   // Meta webhook verification
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token?.trim() === VERIFY_TOKEN) {
     console.log("Meta Webhook Verified!");
     return new NextResponse(challenge, { status: 200 });
   }
