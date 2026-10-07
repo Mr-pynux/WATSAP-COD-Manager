@@ -108,6 +108,47 @@ async function sendWhatsAppMessage(to: string, text: string) {
   }
 }
 
+// Function to download media (audio / voice notes) from WhatsApp Cloud API
+async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string; mimeType: string } | null> {
+  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  if (!token || !mediaId) return null;
+
+  try {
+    // 1. Get media URL from Meta Graph API
+    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const metaData = await metaRes.json();
+    if (!metaData.url) {
+      console.error("[WhatsApp Media] Failed to get media URL:", metaData);
+      return null;
+    }
+
+    // 2. Download media bytes
+    const mediaRes = await fetch(metaData.url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "curl/7.64.1",
+      },
+    });
+
+    if (!mediaRes.ok) {
+      console.error("[WhatsApp Media] Download failed status:", mediaRes.status);
+      return null;
+    }
+
+    const arrayBuffer = await mediaRes.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const rawMime = metaData.mime_type || "audio/ogg";
+    const cleanMime = rawMime.split(";")[0].trim();
+
+    return { base64, mimeType: cleanMime };
+  } catch (err) {
+    console.error("[WhatsApp Media] Exception downloading media:", err);
+    return null;
+  }
+}
+
 const VERIFY_TOKEN = (process.env.META_VERIFY_TOKEN || "watsap_cod_token").trim();
 
 export async function GET(req: NextRequest) {
@@ -295,21 +336,23 @@ export async function POST(req: NextRequest) {
           markMessageAsRead(messageId).catch(() => {});
         }
 
+        let audioData: { base64: string; mimeType: string } | null = null;
         if (isAudio) {
-          console.log(`[WhatsApp Bot] Audio/Voice message received from ${from}. Sending fallback reply.`);
-          const audioFallbackReply = "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏";
-          await sendWhatsAppMessage(from, audioFallbackReply);
-
-          try {
-            const sessionId = await getOrCreateSession(from);
-            if (sessionId) {
-              await saveChatMessage(sessionId, "user", "[رسالة صوتية (أوديو) 🎙️]");
-              await saveChatMessage(sessionId, "assistant", audioFallbackReply);
-            }
-          } catch (sessionErr) {
-            console.error("Error saving audio chat session:", sessionErr);
+          const mediaId = message.audio?.id;
+          if (mediaId) {
+            console.log(`[WhatsApp Bot] Downloading audio media ${mediaId} from Meta...`);
+            audioData = await downloadWhatsAppMedia(mediaId);
           }
-        } else if (msg_body) {
+
+          if (!audioData) {
+            console.log(`[WhatsApp Bot] Audio download failed. Sending fallback baffle reply.`);
+            const fallback = "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏";
+            await sendWhatsAppMessage(from, fallback);
+            return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
+          }
+        }
+
+        if (msg_body || audioData) {
           try {
             // 1. Get or create chat session for this customer
             const sessionId = await getOrCreateSession(from);
@@ -318,8 +361,9 @@ export async function POST(req: NextRequest) {
             const history = sessionId ? await getChatHistory(sessionId, 8) : [];
 
             // 3. Save incoming user message
+            const userHistoryMsg = audioData ? "[رسالة صوتية (أوديو) 🎙️]" : msg_body!;
             if (sessionId) {
-              await saveChatMessage(sessionId, "user", msg_body);
+              await saveChatMessage(sessionId, "user", userHistoryMsg);
             }
 
             // 4. Fetch live bot settings and products from Supabase
@@ -364,6 +408,17 @@ export async function POST(req: NextRequest) {
                   .join("\n")
               : "(هذه بداية المحادثة، لا توجد رسائل سابقة)";
 
+            const userPromptText = audioData
+              ? `الرسالة الحالية من الزبون: [تسجيل صوتي (أوديو) مرفق بالدارجة المغربية]`
+              : `الرسالة الحالية الجديدة من الزبون: "${msg_body}"`;
+
+            const audioGuidelines = audioData
+              ? `
+تعليمات هامة جداً للتسجيل الصوتي:
+- استمع للتسجيل الصوتي بدقة وافهم ما يريده الزبون بالدارجة المغربية بدقة (سواء سأل عن المنتجات، الأثمنة، المقاسات، الألوان، التوصيل، أو أكد طلبه).
+- أجب الزبون مباشرة بالدارجة المغربية كأنك تتحدث معه بلباقة واحترافية تساعده في الشراء.`
+              : "";
+
             const prompt = `${customInstruction}
 
 ---
@@ -375,7 +430,8 @@ ${catalogText}
 ${historyText}
 ---
 
-الرسالة الحالية الجديدة من الزبون: "${msg_body}"
+${userPromptText}
+${audioGuidelines}
 
 قواعد صارمة جداً لإدارة الذاكرة والطلب:
 1. ذاكرة المحادثة: انتبه جيداً للرسائل السابقة في سجل المحادثة. الزبون غالباً ما يرسل معلوماته مفرقة على عدة رسائل (مثلاً: يرسل الاسم والمدينة في رسالة، ثم يرسل المقاس أو رقم الهاتف في رسالة تالية).
@@ -393,7 +449,18 @@ ${historyText}
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
 
-            const result = await model.generateContent(prompt);
+            const contents: any[] = [];
+            if (audioData) {
+              contents.push({
+                inlineData: {
+                  mimeType: audioData.mimeType,
+                  data: audioData.base64,
+                },
+              });
+            }
+            contents.push(prompt);
+
+            const result = await model.generateContent(contents);
             let aiResponse = result.response.text();
 
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
@@ -459,10 +526,17 @@ ${historyText}
             }
           } catch (aiError) {
             console.error("AI Generation Error:", aiError);
-            await sendWhatsAppMessage(
-              from,
-              "مرحبا بك! شكرا على تواصلك معنا، غادي يجاوبك أحد ممثلي الخدمة فـ أقرب وقت."
-            );
+            if (audioData) {
+              await sendWhatsAppMessage(
+                from,
+                "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏"
+              );
+            } else {
+              await sendWhatsAppMessage(
+                from,
+                "مرحبا بك! شكرا على تواصلك معنا، غادي يجاوبك أحد ممثلي الخدمة فـ أقرب وقت."
+              );
+            }
           }
         }
       }
