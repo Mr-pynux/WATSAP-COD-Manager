@@ -286,15 +286,30 @@ export async function POST(req: NextRequest) {
         const from = message.from;
         const messageId = message.id;
         const msg_body = message.text?.body;
+        const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio;
 
-        console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || "[non-text message]"}`);
+        console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
 
         // Mark as read
         if (messageId) {
           markMessageAsRead(messageId).catch(() => {});
         }
 
-        if (msg_body) {
+        if (isAudio) {
+          console.log(`[WhatsApp Bot] Audio/Voice message received from ${from}. Sending fallback reply.`);
+          const audioFallbackReply = "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏";
+          await sendWhatsAppMessage(from, audioFallbackReply);
+
+          try {
+            const sessionId = await getOrCreateSession(from);
+            if (sessionId) {
+              await saveChatMessage(sessionId, "user", "[رسالة صوتية (أوديو) 🎙️]");
+              await saveChatMessage(sessionId, "assistant", audioFallbackReply);
+            }
+          } catch (sessionErr) {
+            console.error("Error saving audio chat session:", sessionErr);
+          }
+        } else if (msg_body) {
           try {
             // 1. Get or create chat session for this customer
             const sessionId = await getOrCreateSession(from);
