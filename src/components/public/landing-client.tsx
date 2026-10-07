@@ -123,7 +123,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
     return MA_PHONE_REGEX.test(phoneValue) ? ("valid" as const) : ("invalid" as const);
   }, [phoneValue]);
 
-  const images = product.imageUrls;
+  const images = product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls : ["/shoespot-logo.png"];
   const description = product.description || FALLBACK_DESCRIPTION;
   const regularTotal = product.priceMad * quantity;
   const discountMad = orderDiscount(quantity, product);
@@ -137,23 +137,27 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
 
   const availableSizes = useMemo(() => {
     const allPossibleSizes = ["39", "40", "41", "42", "43", "44", "45"];
-    return allPossibleSizes.filter((s) => {
+    const fromStock = allPossibleSizes.filter((s) => {
       if (!product.stockBySize) return false;
       const stockVal = String(product.stockBySize[s] || "").trim().toLowerCase();
       return stockVal !== "" && stockVal !== "0" && stockVal !== "-";
     });
-  }, [product.stockBySize]);
+    if (fromStock.length > 0) return fromStock;
+    if (product.sizes && product.sizes.length > 0) return product.sizes;
+    return [];
+  }, [product.stockBySize, product.sizes]);
 
   function scrollToForm() {
     document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" });
   }
 
   async function onSubmit(values: FormData) {
-    if (!size) {
+    if (availableSizes.length > 0 && !size) {
       setSizeTouched(true);
       toast.error("اختر المقاس أولا");
       return;
     }
+    const orderSize = size || (availableSizes.length > 0 ? availableSizes[0] : "Standard");
     setSubmitting(true);
     try {
       const res = await fetch("/api/orders", {
@@ -166,7 +170,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
           city: values.city,
           district: values.district || null,
           landmark: values.landmark || null,
-          size,
+          size: orderSize,
           quantity,
           paymentMethod: values.paymentMethod,
         }),
@@ -387,7 +391,7 @@ export function LandingClient({ product, onBack }: LandingClientProps) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {availableSizes.length === 0 ? (
-                    <p className="text-sm text-rose-500 font-bold">المنتج غير متوفر حالياً بالمقاسات.</p>
+                    <p className="text-sm text-stone-500 font-semibold bg-stone-100 px-3 py-1.5 rounded-lg">مقاس موحد (Standard / متوفر لجميع المقاسات)</p>
                   ) : (
                     availableSizes.map((s) => (
                     <button

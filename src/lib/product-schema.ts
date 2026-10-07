@@ -19,16 +19,16 @@ const videoField = z.preprocess(
 /** Payload schema shared by create + update product endpoints. */
 export const productInputSchema = z.object({
   name: z.string().trim().min(2, "الاسم قصير"),
-  imageUrls: z.array(imageField).min(1, "صورة وحدة على الأقل"),
+  imageUrls: z.array(imageField).default([]),
   videoUrl: videoField,
   description: z.string().trim().max(2000).nullable().optional(),
   features: z.array(z.string().trim().min(1).max(120)).max(10).optional(),
-  priceMad: z.number().positive("الثمن خاصو يكون أكبر من 0"),
+  priceMad: z.number().min(0, "الثمن غير صحيح"),
   oldPriceMad: z.number().positive().nullable().optional(),
   offerQty: z.number().int().min(2).max(10).nullable().optional(),
   offerTotalMad: z.number().positive().nullable().optional(),
   costMad: z.number().min(0).optional(),
-  sizes: z.array(z.string().trim().min(1).max(8)).min(1, "مقاس واحد على الأقل"),
+  sizes: z.array(z.string().trim()).default([]),
   colors: z
     .array(
       z.object({
@@ -36,7 +36,7 @@ export const productInputSchema = z.object({
         hex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "لون غير صالح"),
       })
     )
-    .min(1, "لون واحد على الأقل"),
+    .default([]),
   active: z.boolean().optional(),
 });
 

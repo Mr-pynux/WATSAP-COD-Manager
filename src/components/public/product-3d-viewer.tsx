@@ -47,6 +47,7 @@ export function Product3DViewer({
   const media = useMemo<MediaItem[]>(() => {
     const items: MediaItem[] = images.map((src) => ({ type: "image", src }));
     if (videoUrl) items.push({ type: "video", src: videoUrl });
+    if (items.length === 0) items.push({ type: "image", src: "/shoespot-logo.png" });
     return items;
   }, [images, videoUrl]);
 

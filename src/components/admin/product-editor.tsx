@@ -75,20 +75,31 @@ interface Draft {
 }
 
 function dtoToDraft(p: ProductDTO): Draft {
+  const existingSizes =
+    p.sizes && p.sizes.length > 0
+      ? p.sizes.join("، ")
+      : Object.keys(p.stockBySize || {})
+          .filter((k) => {
+            const val = String(p.stockBySize?.[k] || "").trim();
+            return val !== "" && val !== "0" && val !== "-";
+          })
+          .sort((a, b) => Number(a) - Number(b))
+          .join("، ");
+
   return {
-    name: p.name,
+    name: p.name || "",
     description: p.description ?? "",
-    features: p.features,
-    imageUrls: [...p.imageUrls],
+    features: p.features || [],
+    imageUrls: [...(p.imageUrls || [])],
     videoUrl: p.videoUrl ?? "",
-    price: String(p.priceMad),
+    price: p.priceMad != null ? String(p.priceMad) : "",
     oldPrice: p.oldPriceMad != null ? String(p.oldPriceMad) : "",
     cost: String(p.costMad ?? 0),
     offerEnabled: p.offerQty != null && p.offerTotalMad != null,
     offerQty: String(p.offerQty ?? 2),
     offerTotal: p.offerTotalMad != null ? String(p.offerTotalMad) : "",
-    sizes: p.sizes.join("، "),
-    colors: p.colors.map((c) => ({ name: c.name, hex: c.hex })),
+    sizes: existingSizes,
+    colors: (p.colors || []).map((c) => ({ name: c.name, hex: c.hex })),
     active: p.active,
   };
 }
@@ -236,38 +247,25 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     if (!draft) return;
     setError(null);
 
-    const priceMad = parseFloat(draft.price);
-    if (!draft.name.trim() || draft.name.trim().length < 2) {
+    const priceMad = parseFloat(draft.price) || 0;
+    if (!draft.name.trim()) {
       setError("اسم المنتج مطلوب");
-      return;
-    }
-    if (!priceMad || priceMad <= 0) {
-      setError("ثمن الوحدة خاصو يكون رقم أكبر من 0");
-      return;
-    }
-    if (draft.imageUrls.length === 0) {
-      setError("زيد صورة وحدة على الأقل للمنتج");
-      return;
-    }
-    if (parsedSizes.length === 0) {
-      setError("زيد مقاس واحد على الأقل (مثلا: 39، 40، 41)");
-      return;
-    }
-    if (draft.colors.length === 0 || draft.colors.some((c) => !c.name.trim())) {
-      setError("زيد لون واحد على الأقل وبسميه");
       return;
     }
 
     const offerQty = draft.offerEnabled ? parseInt(draft.offerQty, 10) : null;
     const offerTotal = draft.offerEnabled ? parseFloat(draft.offerTotal) : null;
-    if (offerQty && offerTotal != null && offerTotal >= offerQty * priceMad) {
+    if (offerQty && offerTotal != null && priceMad > 0 && offerTotal >= offerQty * priceMad) {
       setError("ثمن العرض خاصو يكون أقل من ثمن الوحدات منفصلة");
       return;
     }
 
+    // Colors and sizes are completely optional
+    const validColors = (draft.colors || []).filter((c) => c && c.name && c.name.trim());
+
     const payload = {
       name: draft.name.trim(),
-      imageUrls: draft.imageUrls,
+      imageUrls: draft.imageUrls || [],
       videoUrl: draft.videoUrl.trim() || null,
       description: draft.description.trim() || null,
       features: draft.features.map((f) => f.trim()).filter(Boolean),
@@ -277,7 +275,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       offerTotalMad: offerTotal,
       costMad: draft.cost ? parseFloat(draft.cost) : 0,
       sizes: parsedSizes,
-      colors: draft.colors,
+      colors: validColors,
       active: draft.active,
     };
 
@@ -814,19 +812,20 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       {/* ── sizes + colors ─────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>المقاسات والألوان</CardTitle>
+          <CardTitle>المقاسات والألوان (اختياري)</CardTitle>
           <CardDescription>
-            المقاسات بالفاصلة العربية ولا العادية — مثلا: 39، 40، 41
+            المقاسات بالفاصلة — إلا كنتي عمرتيهم فـ شيت المخزون غيطلعو تلقائياً هنا
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-3">
-            <Label htmlFor="p-sizes">المقاسات *</Label>
+            <Label htmlFor="p-sizes">المقاسات (اختياري)</Label>
             <Input
               id="p-sizes"
               value={draft.sizes}
               onChange={(e) => set({ sizes: e.target.value })}
               className="ltr-num"
+              placeholder="مثلا: 39، 40، 41، 42، 43، 44، 45"
             />
             <div className="flex flex-wrap gap-1.5">
               {parsedSizes.map((s) => (
@@ -838,7 +837,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
 
           <div className="space-y-3">
-            <Label>الألوان *</Label>
+            <Label>الألوان (اختياري)</Label>
             <div className="space-y-2">
               {draft.colors.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
