@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 // We use the service role key to bypass RLS in webhooks
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
