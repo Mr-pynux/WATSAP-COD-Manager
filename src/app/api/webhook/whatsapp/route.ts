@@ -11,7 +11,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!.trim()
 );
 
-// Basic function to mark message as read
+// In-memory cache for strict 1-to-1 message deduplication (prevents Meta webhook duplicate retries)
+const processedMessageIds = new Map<string, number>();
+const activeProcessingPhones = new Set<string>();
 async function markMessageAsRead(messageId: string) {
   const token = process.env.WHATSAPP_API_TOKEN?.trim();
   const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -389,53 +391,96 @@ export async function POST(req: NextRequest) {
         const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio || !!message.voice;
         let isVoiceNote = false;
 
-        console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
-
-        // Mark as read
+        // 🛑 STRICT 1-TO-1 DEDUPLICATION 1: Meta Message ID (wamid)
         if (messageId) {
-          markMessageAsRead(messageId).catch(() => {});
+          const now = Date.now();
+          for (const [id, timestamp] of processedMessageIds.entries()) {
+            if (now - timestamp > 10 * 60 * 1000) processedMessageIds.delete(id);
+          }
+
+          if (processedMessageIds.has(messageId)) {
+            console.log(`[WhatsApp Bot] Duplicate webhook ignored for message ID: ${messageId}`);
+            return NextResponse.json({ status: "DUPLICATE_IGNORED" }, { status: 200 });
+          }
+          processedMessageIds.set(messageId, now);
         }
 
-        if (isAudio) {
-          const audioObj = message.audio || message.voice;
-          const mediaId = audioObj?.id || (message[message.type]?.id);
+        // 🛑 STRICT 1-TO-1 DEDUPLICATION 2: Active Phone Lock (prevents concurrent duplicate runs)
+        if (activeProcessingPhones.has(from)) {
+          console.log(`[WhatsApp Bot] Concurrent execution in progress for ${from}. Ignoring duplicate.`);
+          return NextResponse.json({ status: "CONCURRENT_IGNORED" }, { status: 200 });
+        }
 
-          if (mediaId) {
-            console.log(`[WhatsApp Bot] Downloading audio media ${mediaId} from Meta...`);
-            const audioData = await downloadWhatsAppMedia(mediaId);
-            if (audioData) {
-              const apiKey = process.env.AI_API_KEY?.trim() || "";
-              console.log(`[WhatsApp Bot] Transcribing audio with Gemini...`);
-              const transcribedText = await transcribeAudioWithGemini(audioData.base64, audioData.mimeType, apiKey);
-              if (transcribedText) {
-                console.log(`[WhatsApp Bot] Audio Transcribed successfully: "${transcribedText}"`);
-                msg_body = transcribedText;
-                isVoiceNote = true;
+        activeProcessingPhones.add(from);
+
+        try {
+          console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
+
+          // Mark as read
+          if (messageId) {
+            markMessageAsRead(messageId).catch(() => {});
+          }
+
+          if (isAudio) {
+            const audioObj = message.audio || message.voice;
+            const mediaId = audioObj?.id || (message[message.type]?.id);
+
+            if (mediaId) {
+              console.log(`[WhatsApp Bot] Downloading audio media ${mediaId} from Meta...`);
+              const audioData = await downloadWhatsAppMedia(mediaId);
+              if (audioData) {
+                const apiKey = process.env.AI_API_KEY?.trim() || "";
+                console.log(`[WhatsApp Bot] Transcribing audio with Gemini...`);
+                const transcribedText = await transcribeAudioWithGemini(audioData.base64, audioData.mimeType, apiKey);
+                if (transcribedText) {
+                  console.log(`[WhatsApp Bot] Audio Transcribed successfully: "${transcribedText}"`);
+                  msg_body = transcribedText;
+                  isVoiceNote = true;
+                }
               }
             }
-          }
 
-          if (!msg_body) {
-            console.log(`[WhatsApp Bot] Audio inaudible/garbled or failed. Sending polite request.`);
-            const fallback = "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
-            await sendWhatsAppMessage(from, fallback);
-            return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
-          }
-        }
-
-        if (msg_body) {
-          try {
-            // 1. Get or create chat session for this customer
-            const sessionId = await getOrCreateSession(from);
-
-            // 2. Fetch conversation history
-            const history = sessionId ? await getChatHistory(sessionId, 8) : [];
-
-            // 3. Save incoming user message
-            const userHistoryMsg = isVoiceNote ? `🎙️ [أوديو]: "${msg_body}"` : msg_body;
-            if (sessionId) {
-              await saveChatMessage(sessionId, "user", userHistoryMsg);
+            if (!msg_body) {
+              console.log(`[WhatsApp Bot] Audio inaudible/garbled or failed. Sending polite request.`);
+              const fallback = "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
+              await sendWhatsAppMessage(from, fallback);
+              return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
             }
+          }
+
+          if (msg_body) {
+            try {
+              // 1. Get or create chat session for this customer
+              const sessionId = await getOrCreateSession(from);
+              const userHistoryMsg = isVoiceNote ? `🎙️ [أوديو]: "${msg_body}"` : msg_body;
+
+              // 🛑 STRICT 1-TO-1 DEDUPLICATION 3: Database check (prevents duplicate retries across lambdas)
+              if (sessionId) {
+                const { data: recentMsgs } = await supabase
+                  .from("chat_messages")
+                  .select("content, created_at")
+                  .eq("session_id", sessionId)
+                  .eq("role", "user")
+                  .order("created_at", { ascending: false })
+                  .limit(1);
+
+                if (recentMsgs && recentMsgs.length > 0) {
+                  const lastMsg = recentMsgs[0];
+                  const timeDiff = Date.now() - new Date(lastMsg.created_at).getTime();
+                  if (lastMsg.content === userHistoryMsg && timeDiff < 25000) {
+                    console.log(`[WhatsApp Bot] Database duplicate detected for ${from} within ${timeDiff}ms. Ignoring.`);
+                    return NextResponse.json({ status: "DUPLICATE_IGNORED" }, { status: 200 });
+                  }
+                }
+              }
+
+              // 2. Fetch conversation history
+              const history = sessionId ? await getChatHistory(sessionId, 8) : [];
+
+              // 3. Save incoming user message
+              if (sessionId) {
+                await saveChatMessage(sessionId, "user", userHistoryMsg);
+              }
 
             // 4. Fetch live bot settings and products from Supabase
             const [botSettingsRes, productsRes] = await Promise.all([
@@ -716,11 +761,11 @@ ${userPromptText}
               // Multiple images: send all product photos FIRST
               for (const item of imagesToSend) {
                 await sendWhatsAppImage(from, item.url, item.caption);
-                // 500ms spacing between photos
-                await new Promise((r) => setTimeout(r, 500));
+                // 250ms spacing between photos
+                await new Promise((r) => setTimeout(r, 250));
               }
-              // Wait 1.5 seconds to guarantee WhatsApp finishes delivering all media messages before sending the text
-              await new Promise((r) => setTimeout(r, 1500));
+              // 400ms delay to ensure WhatsApp queues media packets first before text
+              await new Promise((r) => setTimeout(r, 400));
 
               // Then send the conversational and informational message right underneath the photos
               if (cleanText) {
@@ -745,16 +790,19 @@ ${userPromptText}
             }
           }
         }
+      } finally {
+        activeProcessingPhones.delete(from);
       }
-
-      return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
-    } else {
-      return NextResponse.json({ status: "NOT_FOUND" }, { status: 404 });
     }
-  } catch (error) {
-    console.error("Webhook error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+
+    return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
+  } else {
+    return NextResponse.json({ status: "NOT_FOUND" }, { status: 404 });
   }
+} catch (error) {
+  console.error("Webhook error:", error);
+  return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+}
 }
 
 
