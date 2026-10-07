@@ -9,6 +9,7 @@ import {
   FilterX,
   Loader2,
   MessageCircle,
+  Moon,
   Package,
   Search,
 } from "lucide-react";
@@ -58,7 +59,7 @@ import {
 import { fmtDate, toDateInput } from "@/lib/format";
 import type { OrderDTO, OrdersResponse, BlacklistEntryDTO, CourierStatsDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer, bulkDeleteOrdersServer } from "./actions";
+import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer, bulkDeleteOrdersServer, getPendingEveningDispatchCountServer, sendEveningDispatchServer } from "./actions";
 
 interface Filters {
   status: string;
@@ -102,6 +103,8 @@ export default function AdminOrdersPage() {
   const [strikesByPhone, setStrikesByPhone] = useState<Record<string, number>>({});
   const [bulkStatus, setBulkStatus] = useState<string>("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [pendingDispatchCount, setPendingDispatchCount] = useState<number>(0);
+  const [sendingDispatch, setSendingDispatch] = useState(false);
   const firstLoad = useRef(true);
 
   // debounced phone search
@@ -118,6 +121,9 @@ export default function AdminOrdersPage() {
     try {
       const res = await getOrdersServer(filters, page);
       setData(res);
+      getPendingEveningDispatchCountServer()
+        .then((c) => setPendingDispatchCount(c.count))
+        .catch(() => {});
     } catch {
       toast.error("تعذر تحميل الطلبات");
     } finally {
@@ -225,6 +231,23 @@ export default function AdminOrdersPage() {
       document.body.removeChild(link);
     } catch {
       toast.error("تعذر تصدير الطلبات");
+    }
+  }
+
+  async function handleEveningDispatch() {
+    try {
+      setSendingDispatch(true);
+      const res = await sendEveningDispatchServer();
+      if (res.success) {
+        toast.success(res.message);
+        load();
+      } else {
+        toast.error(res.message || "حدث خطأ أثناء الإرسال");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "تعذر إرسال إشعار الشحن");
+    } finally {
+      setSendingDispatch(false);
     }
   }
 
@@ -343,6 +366,20 @@ export default function AdminOrdersPage() {
         <Button onClick={exportCsv} variant="outline" className="gap-1.5 h-10">
           <Download className="h-4 w-4" />
           تصدير CSV {selected.size > 0 ? `(${selected.size})` : "(الفلاتر الحالية)"}
+        </Button>
+
+        <Button
+          onClick={handleEveningDispatch}
+          disabled={sendingDispatch}
+          className="gap-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+        >
+          {sendingDispatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4" />}
+          إرسال إشعار الشحن المسائي (8PM - 10PM)
+          {pendingDispatchCount > 0 && (
+            <Badge variant="secondary" className="bg-emerald-800 text-white px-2 py-0.5 text-xs font-bold">
+              {pendingDispatchCount}
+            </Badge>
+          )}
         </Button>
 
         {selected.size > 0 && (

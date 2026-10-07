@@ -87,3 +87,50 @@ export function buildOrderWaUrl(
 ): string {
   return waLink(phone, render(templateBody, vars));
 }
+
+/**
+ * Send a direct WhatsApp text message via Meta Cloud API
+ */
+export async function sendDirectWhatsAppMessage(to: string, text: string) {
+  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+
+  if (!token || !phone_number_id) {
+    console.error("Missing WhatsApp configuration (token or phone_number_id)");
+    return { error: "Missing WhatsApp configuration" };
+  }
+
+  // Format phone to international Moroccan format 212...
+  let cleanPhone = to.replace(/\D/g, "");
+  if (cleanPhone.startsWith("0")) {
+    cleanPhone = "212" + cleanPhone.slice(1);
+  } else if (!cleanPhone.startsWith("212") && cleanPhone.length === 9) {
+    cleanPhone = "212" + cleanPhone;
+  }
+
+  const url = `https://graph.facebook.com/v21.0/${phone_number_id}/messages`;
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: cleanPhone,
+    type: "text",
+    text: { body: text },
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    return { success: response.ok, data };
+  } catch (error: any) {
+    console.error("Error sending direct WhatsApp message:", error);
+    return { error: error.message || error };
+  }
+}
+

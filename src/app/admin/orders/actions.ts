@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { sendDirectWhatsAppMessage } from "@/lib/whatsapp";
 import type { OrderDTO, OrdersResponse, CourierStatsDTO, BlacklistEntryDTO } from "@/lib/types";
 
 // Helper to check admin access (already done in middleware, but good practice)
@@ -332,3 +333,113 @@ export async function logWhatsAppAttemptServer(orderId: string, templateKey?: st
   
   return { url, success: true };
 }
+
+/**
+ * Count how many confirmed orders are pending the evening dispatch notice
+ */
+export async function getPendingEveningDispatchCountServer() {
+  const supabase = await verifyAdmin();
+
+  // Find all confirmed orders
+  const { data: confirmedOrders, error } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("status", "confirmed");
+
+  if (error || !confirmedOrders) return { count: 0 };
+
+  const ids = confirmedOrders.map((o) => o.id);
+  if (ids.length === 0) return { count: 0 };
+
+  // Check which ones already had evening_dispatch_sent
+  const { data: sentEvents } = await supabase
+    .from("order_events")
+    .select("order_id")
+    .eq("type", "evening_dispatch_sent")
+    .in("order_id", ids);
+
+  const sentOrderIds = new Set((sentEvents || []).map((e) => e.order_id));
+  const pendingCount = ids.filter((id) => !sentOrderIds.has(id)).length;
+
+  return { count: pendingCount };
+}
+
+/**
+ * Send evening dispatch WhatsApp notification (8:00 PM - 10:00 PM) to all confirmed orders
+ * Message: "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راها غادا تكون عندك فالقريب العاجل."
+ */
+export async function sendEveningDispatchServer() {
+  const supabase = await verifyAdmin();
+
+  // 1. Fetch confirmed orders
+  const { data: confirmedOrders, error: fetchErr } = await supabase
+    .from("orders")
+    .select("id, order_number, customer_name, phone, status")
+    .eq("status", "confirmed");
+
+  if (fetchErr) throw new Error(fetchErr.message);
+  if (!confirmedOrders || confirmedOrders.length === 0) {
+    return { success: true, count: 0, message: "لا توجد أي طلبيات مؤكدة حالياً لإرسال الإشعار." };
+  }
+
+  // 2. Filter out orders that already received the evening dispatch notice
+  const ids = confirmedOrders.map((o) => o.id);
+  const { data: sentEvents } = await supabase
+    .from("order_events")
+    .select("order_id")
+    .eq("type", "evening_dispatch_sent")
+    .in("order_id", ids);
+
+  const sentOrderIds = new Set((sentEvents || []).map((e) => e.order_id));
+  const ordersToSend = confirmedOrders.filter((o) => !sentOrderIds.has(o.id));
+
+  if (ordersToSend.length === 0) {
+    return { success: true, count: 0, message: "جميع الطلبيات المؤكدة تم إرسال إشعار الشحن لها مسبقاً." };
+  }
+
+  const dispatchText = "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راها غادا تكون عندك فالقريب العاجل.";
+
+  let sentCount = 0;
+  const errors: string[] = [];
+
+  for (const order of ordersToSend) {
+    try {
+      const res = await sendDirectWhatsAppMessage(order.phone, dispatchText);
+      if (res.success || !res.error) {
+        sentCount++;
+        // Log event
+        await supabase.from("order_events").insert({
+          order_id: order.id,
+          type: "evening_dispatch_sent",
+          detail: {
+            message: dispatchText,
+            phone: order.phone,
+            sent_at: new Date().toISOString(),
+          },
+        });
+
+        // Update shipped_at timestamp and status to shipped
+        await supabase
+          .from("orders")
+          .update({
+            status: "shipped",
+            shipped_at: new Date().toISOString(),
+          })
+          .eq("id", order.id);
+      } else {
+        errors.push(`فشل الإرسال لـ ${order.phone}: ${JSON.stringify(res.error)}`);
+      }
+    } catch (err: any) {
+      errors.push(`خطأ لـ ${order.phone}: ${err.message}`);
+    }
+  }
+
+  return {
+    success: true,
+    count: sentCount,
+    totalEligible: ordersToSend.length,
+    errors: errors.length > 0 ? errors : undefined,
+    message: `تم إرسال إشعار الشحن لـ ${sentCount} من أصل ${ordersToSend.length} طلبية مؤكدة بنجاح!`,
+  };
+}
+
