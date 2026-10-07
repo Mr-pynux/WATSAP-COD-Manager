@@ -149,6 +149,35 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string;
   }
 }
 
+// Function to transcribe Moroccan Darija voice notes using Gemini Multimodal Audio
+async function transcribeAudioWithGemini(
+  base64Audio: string,
+  mimeType: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Audio,
+        },
+      },
+      "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
+    ]);
+
+    const text = result.response.text().trim();
+    if (!text || text.length < 2) return null;
+    return text;
+  } catch (err) {
+    console.error("[WhatsApp Transcription] Error transcribing audio with Gemini:", err);
+    return null;
+  }
+}
+
 const VERIFY_TOKEN = (process.env.META_VERIFY_TOKEN || "watsap_cod_token").trim();
 
 export async function GET(req: NextRequest) {
@@ -326,8 +355,9 @@ export async function POST(req: NextRequest) {
         const message = messages[0];
         const from = message.from;
         const messageId = message.id;
-        const msg_body = message.text?.body;
+        let msg_body = message.text?.body;
         const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio;
+        let isVoiceNote = false;
 
         console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
 
@@ -336,23 +366,32 @@ export async function POST(req: NextRequest) {
           markMessageAsRead(messageId).catch(() => {});
         }
 
-        let audioData: { base64: string; mimeType: string } | null = null;
         if (isAudio) {
           const mediaId = message.audio?.id;
           if (mediaId) {
             console.log(`[WhatsApp Bot] Downloading audio media ${mediaId} from Meta...`);
-            audioData = await downloadWhatsAppMedia(mediaId);
+            const audioData = await downloadWhatsAppMedia(mediaId);
+            if (audioData) {
+              const apiKey = process.env.AI_API_KEY?.trim() || "";
+              console.log(`[WhatsApp Bot] Transcribing audio with Gemini...`);
+              const transcribedText = await transcribeAudioWithGemini(audioData.base64, audioData.mimeType, apiKey);
+              if (transcribedText) {
+                console.log(`[WhatsApp Bot] Audio Transcribed successfully: "${transcribedText}"`);
+                msg_body = transcribedText;
+                isVoiceNote = true;
+              }
+            }
           }
 
-          if (!audioData) {
-            console.log(`[WhatsApp Bot] Audio download failed. Sending fallback baffle reply.`);
+          if (!msg_body) {
+            console.log(`[WhatsApp Bot] Audio download/transcription failed. Sending fallback baffle reply.`);
             const fallback = "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏";
             await sendWhatsAppMessage(from, fallback);
             return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
           }
         }
 
-        if (msg_body || audioData) {
+        if (msg_body) {
           try {
             // 1. Get or create chat session for this customer
             const sessionId = await getOrCreateSession(from);
@@ -361,7 +400,7 @@ export async function POST(req: NextRequest) {
             const history = sessionId ? await getChatHistory(sessionId, 8) : [];
 
             // 3. Save incoming user message
-            const userHistoryMsg = audioData ? "[رسالة صوتية (أوديو) 🎙️]" : msg_body!;
+            const userHistoryMsg = isVoiceNote ? `🎙️ [أوديو]: "${msg_body}"` : msg_body;
             if (sessionId) {
               await saveChatMessage(sessionId, "user", userHistoryMsg);
             }
@@ -408,17 +447,9 @@ export async function POST(req: NextRequest) {
                   .join("\n")
               : "(هذه بداية المحادثة، لا توجد رسائل سابقة)";
 
-            const userPromptText = audioData
-              ? `الرسالة الحالية من الزبون: [تسجيل صوتي (أوديو) مرفق بالدارجة المغربية]`
+            const userPromptText = isVoiceNote
+              ? `الرسالة الحالية من الزبون (أرسلها الزبون عبر تسجيل صوتي/أوديو بالدارجة المغربية): "${msg_body}"`
               : `الرسالة الحالية الجديدة من الزبون: "${msg_body}"`;
-
-            const audioGuidelines = audioData
-              ? `
-تعليمات هامة جداً وصارمة للتسجيل الصوتي:
-- أنت الآن قادر على الاستماع للرسائل الصوتية (الفوكال) وفهمها بالكامل.
-- استمع للتسجيل الصوتي المرفق بدقة وافهم كلام الزبون بالدارجة المغربية (سواء سأل عن المنتجات، الأثمنة، المقاسات، الألوان، التوصيل، أو سأل هل تفهم الفوكال، أو أكد طلبه).
-- ممنوع منعاً باتاً أن تعتذر أو تقول أنك لا تسمع الصوت أو أنك تقرأ الكتابة فقط! أنت تسمع وتفهم الفوكال بوضوح تام وتجيبه مباشرة بالدارجة المغربية بلباقة واحترافية.`
-              : "";
 
             const prompt = `${customInstruction}
 
@@ -432,36 +463,27 @@ ${historyText}
 ---
 
 ${userPromptText}
-${audioGuidelines}
 
-قواعد صارمة جداً لإدارة الذاكرة والطلب:
-1. ذاكرة المحادثة: انتبه جيداً للرسائل السابقة في سجل المحادثة. الزبون غالباً ما يرسل معلوماته مفرقة على عدة رسائل (مثلاً: يرسل الاسم والمدينة في رسالة، ثم يرسل المقاس أو رقم الهاتف في رسالة تالية).
-2. منع تكرار الأسئلة: ممنوع نهائياً إعادة طلب أي معلومة سبق للزبون أن قدمها في الرسائل السابقة!
-3. اكتمال الطلب والتسجيل الفوري:
+قواعد صارمة جداً لإدارة الرد والطلب:
+1. إرسال الصور فوراً عند طلبها:
+   إذا طلب الزبون صوراً أو رؤية المنتج أو الألوان (مثلاً: "صيفط ليا التصاور"، "وريني"، "شوف"، "التصاور"):
+   يجب عليك حتماً ولزوماً إضافة هذا التاغ في ردك:
+   [SEND_IMAGE: رابط_الصورة]
+   مثال: "تفضل أخويا هاهي صورة سبرديلة COBRA باللون الأسود الأنيق 👇 [SEND_IMAGE: ${products[0]?.image_urls?.[0] || ""}]"
+2. ذاكرة المحادثة: انتبه جيداً للرسائل السابقة في سجل المحادثة. الزبون غالباً ما يرسل معلوماته مفرقة على عدة رسائل (مثلاً: يرسل الاسم والمدينة في رسالة، ثم يرسل المقاس أو رقم الهاتف في رسالة تالية).
+3. منع تكرار الأسئلة: ممنوع نهائياً إعادة طلب أي معلومة سبق للزبون أن قدمها في الرسائل السابقة!
+4. اكتمال الطلب والتسجيل الفوري:
    بمجرد أن تتوفر لديك المعلومات الأساسية (الاسم، المدينة، المقاس)، أو إذا أكد رغبته في الشراء:
    - اشكره بلباقة وأكد له أن الطلب تم تسجيله وسيتصل به الموزع للتوصيل (الدفع عند الاستلام والتوصيل مجاني).
    - قم فوراً بإضافة هذا التاغ في آخر ردك، جامعاً كل المعلومات من كامل المحادثة:
    [CREATE_ORDER: {"name": "اسم_الزبون", "city": "المدينة", "size": "المقاس", "quantity": 1, "product_id": "معرف_المنتج", "phone": "رقم_الهاتف"}]
-   - مثال: "صافي أخويا أحمد، الطلبية ديالك تأكدات وغادي يتواصل معاك الموزع فـ كازا فـ أقرب وقت باش يوصلها ليك! [CREATE_ORDER: {\"name\": \"أحمد\", \"city\": \"الدار البيضاء\", \"size\": \"43\", \"quantity\": 1, \"phone\": \"${from}\"}]"
-4. إذا طلب الزبون صور:
-   أرجع التاغ: [SEND_IMAGE: رابط_الصورة]`;
+   - مثال: "صافي أخويا أحمد، الطلبية ديالك تأكدات وغادي يتواصل معاك الموزع فـ كازا فـ أقرب وقت باش يوصلها ليك! [CREATE_ORDER: {\"name\": \"أحمد\", \"city\": \"الدار البيضاء\", \"size\": \"43\", \"quantity\": 1, \"phone\": \"${from}\"}]"`;
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
 
-            const contents: any[] = [];
-            if (audioData) {
-              contents.push({
-                inlineData: {
-                  mimeType: audioData.mimeType,
-                  data: audioData.base64,
-                },
-              });
-            }
-            contents.push(prompt);
-
-            const result = await model.generateContent(contents);
+            const result = await model.generateContent(prompt);
             let aiResponse = result.response.text();
 
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
@@ -527,7 +549,7 @@ ${audioGuidelines}
             }
           } catch (aiError) {
             console.error("AI Generation Error:", aiError);
-            if (audioData) {
+            if (isVoiceNote) {
               await sendWhatsAppMessage(
                 from,
                 "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏"
