@@ -541,14 +541,16 @@ ${userPromptText}
       - عطه الثمن مباشرة: 150 درهم للوحدة، 2 بـ 240 درهم، والتوصيل فابور لجميع المدن والدفع عند الاستلام بعد المعاينة.
       - وسوله مباشرة فـ نفس الرسالة: "أخويا شحال كتلبس؟ (شحال النمرة ديالك؟)".
 
-   🔹 المرحلة 2 (التعامل الذكي مع المقاسات والموديلات):
-      - إذا سأل الكليان عن مقاس معين (مثلا: "شنو عندكم فـ 40؟"، "عطيني كاع المنتجات لي كاينين فـ 40"، "أنا كنلبس 43"):
-        1. ابحث في كتالوج المنتجات أعلاه عن **جميع** الموديلات التي تتوفر في ذلك المقاس.
-        2. اذكر له كل الموديلات المتوفرة في ذلك القياس بأسمائها الواضحة (مثلا: "متوفرين عندنا هاد الموديلات فـ القياس {المقاس}: سبرديلة COBRA و سبرديلة New Balance").
-        3. يمكنك إرفاق صورة أحد الموديلات المتوفرة عبر التاغ:
-           [SEND_IMAGE: رابط_صورة_الموديل]
+   🔹 المرحلة 2 (التعامل مع المقاسات والموديلات وعرض الصور لجميع الموديلات):
+      - إذا سأل الكليان عن مقاس معين (مثلا: "شنو عندكم فـ 40؟"، "عطيني كاع المنتجات لي كاينين فـ 40"، "أنا كنلبس 43") أو طلب رؤية الموديلات:
+        1. ابحث في كتالوج المنتجات أعلاه عن **جميع** الموديلات المتوفرة في ذلك القياس.
+        2. اذكر له كل الموديلات المتوفرة في ذلك القياس بأسمائها الواضحة وأثمنتها (150 درهم للحبة، 2 بـ 240 درهم).
+        3. 📸 أرسل صورة **كل موديل متوفر** بدون استثناء عبر تاغ [SEND_IMAGE: رابط_الصورة] لكل موديل!
+           مثال إذا توفر موديلين:
+           [SEND_IMAGE: رابط_صورة_الموديل_الأول]
+           [SEND_IMAGE: رابط_صورة_الموديل_الثاني]
         4. اذكر له مواصفات الجودة: (سلعة نقية بزاف وممتازة: سوميلة ݣومة رطبة مريحة ومضادة للانزلاق، خياطة صحيحة من الداخل، ومخدومة بلانجيكسيون).
-        5. اسأله: "أينا موديل عجبك فيهم أخويا؟ وأينا لون باغي؟"
+        5. اسأله: "أينا موديل عجبك فيهم أخويا؟ وأينا لون باغي باش نوجدو ليك الطلبية؟"
         6. إذا كان قد اختار موديلاً محدداً وذكر قياسه، اطلب منه معلومات التوصيل مباشرة:
            - الإسم الكامل:
            - المدينة:
@@ -621,28 +623,107 @@ ${userPromptText}
               }
             }
 
+            // Clean conversational text (strip out [SEND_IMAGE: ...] tags)
+            const cleanText = aiResponse.replace(/\[SEND_IMAGE:\s*https?:\/\/[^\s\]]+\]/gi, "").trim();
+
             // Save assistant response to session history
             if (sessionId) {
-              const cleanHistoryContent = aiResponse.replace(/\[SEND_IMAGE:\s*https?:\/\/[^\s\]]+\]/gi, "").trim();
-              await saveChatMessage(sessionId, "assistant", cleanHistoryContent);
+              await saveChatMessage(sessionId, "assistant", cleanText);
             }
 
-            // Check if AI requested sending an image
-            const imageMatch = aiResponse.match(/\[SEND_IMAGE:\s*(https?:\/\/[^\s\]]+)\]/i);
+            // 1. Gather any explicit [SEND_IMAGE: ...] tags from AI response
+            const explicitImageUrls = Array.from(
+              aiResponse.matchAll(/\[SEND_IMAGE:\s*(https?:\/\/[^\s\]]+)\]/gi)
+            ).map((m) => m[1]);
 
-            if (imageMatch && imageMatch[1]) {
-              const imageUrl = imageMatch[1];
-              // Remove the [SEND_IMAGE: ...] tag from the text message to keep clean caption
-              const cleanCaption = aiResponse.replace(/\[SEND_IMAGE:\s*https?:\/\/[^\s\]]+\]/gi, "").trim();
+            // 2. Identify all products relevant to this turn (mentioned by name or matching requested size)
+            const relevantProducts: typeof products = [];
 
-              console.log(`[WhatsApp Bot] Sending Image to ${from}: ${imageUrl}`);
+            // A. Check by product name in AI response
+            for (const p of products) {
+              const pName = (p.name || "").trim().toLowerCase();
+              const cleanPName = pName.replace(/(حذاء|سبرديلة|حداء|رياضي|لارجال|للنساء)/gi, "").trim().toLowerCase();
+              const isMentioned =
+                (pName.length > 2 && aiResponse.toLowerCase().includes(pName)) ||
+                (cleanPName.length > 2 && aiResponse.toLowerCase().includes(cleanPName)) ||
+                (pName.includes("cobra") && (aiResponse.toLowerCase().includes("cobra") || aiResponse.includes("كوبرا"))) ||
+                (pName.includes("balance") && (aiResponse.toLowerCase().includes("balance") || aiResponse.includes("بالانس")));
 
-              // Strictly send 1 single message! WhatsApp caption limit is 1024 characters.
-              const singleCaption = cleanCaption.length > 1000 ? cleanCaption.slice(0, 997) + "..." : cleanCaption;
-              await sendWhatsAppImage(from, imageUrl, singleCaption);
+              if (isMentioned && !relevantProducts.some((rp) => rp.id === p.id)) {
+                relevantProducts.push(p);
+              }
+            }
+
+            // B. Check if user asked for a specific shoe size (e.g. 39, 40, 41, 42, 43, 44, 45)
+            const combinedUserQuery = `${msg_body} ${aiResponse}`;
+            const sizeMatches = combinedUserQuery.match(/\b(3[8-9]|4[0-6])\b/g);
+            if (sizeMatches && sizeMatches.length > 0) {
+              const reqSize = sizeMatches[0];
+              for (const p of products) {
+                const stock = p.stock_by_size || {};
+                const stockQty = String(stock[reqSize] ?? "").trim();
+                const hasStock = stockQty !== "" && stockQty !== "0" && stockQty !== "-";
+                const hasInSizes = Array.isArray(p.sizes) && p.sizes.includes(reqSize);
+                if ((hasStock || hasInSizes) && !relevantProducts.some((rp) => rp.id === p.id)) {
+                  relevantProducts.push(p);
+                }
+              }
+            }
+
+            // 3. Assemble images to send (deduplicated)
+            const imagesToSend: { url: string; caption: string }[] = [];
+
+            if (relevantProducts.length > 1) {
+              // Multiple models: send photo for each model with its name & price
+              for (const p of relevantProducts) {
+                const img = p.image_urls?.[0];
+                if (img && !imagesToSend.some((item) => item.url === img)) {
+                  imagesToSend.push({
+                    url: img,
+                    caption: `👟 ${p.name} — ${p.price_mad} درهم`,
+                  });
+                }
+              }
+            } else if (relevantProducts.length === 1) {
+              const p = relevantProducts[0];
+              const img = p.image_urls?.[0];
+              if (img && !imagesToSend.some((item) => item.url === img)) {
+                imagesToSend.push({
+                  url: img,
+                  caption: `👟 ${p.name}`,
+                });
+              }
+            }
+
+            // Include any additional explicit tags from AI
+            for (const url of explicitImageUrls) {
+              if (!imagesToSend.some((item) => item.url === url)) {
+                const matchingP = products.find((p) => p.image_urls?.includes(url));
+                imagesToSend.push({
+                  url,
+                  caption: matchingP ? `👟 ${matchingP.name}` : "",
+                });
+              }
+            }
+
+            console.log(`[WhatsApp Bot] Delivering to ${from}: ${imagesToSend.length} product images`);
+
+            if (imagesToSend.length === 1) {
+              // Single image: send as 1 unified message with full text caption
+              const singleCaption = cleanText.length > 1000 ? cleanText.slice(0, 997) + "..." : cleanText;
+              await sendWhatsAppImage(from, imagesToSend[0].url, singleCaption);
+            } else if (imagesToSend.length > 1) {
+              // Multiple images: send all product photos with clear badges
+              for (const item of imagesToSend) {
+                await sendWhatsAppImage(from, item.url, item.caption);
+              }
+              // Send the complete conversational message
+              if (cleanText) {
+                await sendWhatsAppMessage(from, cleanText);
+              }
             } else {
-              // Send standard single text message
-              await sendWhatsAppMessage(from, aiResponse);
+              // No images to send: send text message
+              await sendWhatsAppMessage(from, cleanText || aiResponse);
             }
           } catch (aiError) {
             console.error("AI Generation Error:", aiError);
