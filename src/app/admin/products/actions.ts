@@ -53,8 +53,23 @@ export async function updateProductServer(id: string, product: Partial<ProductDT
   if (product.costMad !== undefined) updates.cost_mad = product.costMad;
   if (product.sizes !== undefined) updates.sizes = product.sizes;
   if (product.colors !== undefined) updates.colors = product.colors;
-  if (product.active !== undefined) updates.active = product.active;
-  if (product.stockBySize !== undefined) updates.stock_by_size = product.stockBySize;
+  if (product.stockBySize !== undefined) {
+    updates.stock_by_size = product.stockBySize;
+    // If sizes not explicitly specified, automatically sync with non-empty stock sizes
+    if (product.sizes === undefined) {
+      const derivedSizes = Object.entries(product.stockBySize)
+        .filter(([_, qty]) => {
+          const qStr = String(qty || "").trim();
+          const qNum = parseInt(qStr, 10);
+          return (!isNaN(qNum) && qNum > 0) || (qStr !== "" && qStr !== "0" && qStr !== "-");
+        })
+        .map(([sKey]) => sKey)
+        .sort((a, b) => Number(a) - Number(b));
+      if (derivedSizes.length > 0) {
+        updates.sizes = derivedSizes;
+      }
+    }
+  }
 
   const { error } = await supabase.from("products").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
