@@ -127,13 +127,37 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string;
       return null;
     }
 
-    // 2. Download media bytes
-    const mediaRes = await fetch(metaData.url, {
+    // 2. Download media bytes, safely following any redirects with Authorization header
+    let targetUrl = metaData.url;
+    let mediaRes = await fetch(targetUrl, {
+      redirect: "manual",
       headers: {
         Authorization: `Bearer ${token}`,
         "User-Agent": "curl/7.64.1",
       },
     });
+
+    if (mediaRes.status >= 300 && mediaRes.status < 400) {
+      const redirectLocation = mediaRes.headers.get("location");
+      if (redirectLocation) {
+        mediaRes = await fetch(redirectLocation, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "User-Agent": "curl/7.64.1",
+          },
+        });
+      }
+    }
+
+    if (!mediaRes.ok && mediaRes.status !== 200) {
+      // Direct retry with default redirect following
+      mediaRes = await fetch(metaData.url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "curl/7.64.1",
+        },
+      });
+    }
 
     if (!mediaRes.ok) {
       console.error("[WhatsApp Media] Download failed status:", mediaRes.status);
@@ -359,7 +383,7 @@ export async function POST(req: NextRequest) {
         const from = message.from;
         const messageId = message.id;
         let msg_body = message.text?.body;
-        const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio;
+        const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio || !!message.voice;
         let isVoiceNote = false;
 
         console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
@@ -370,7 +394,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (isAudio) {
-          const mediaId = message.audio?.id;
+          const audioObj = message.audio || message.voice;
+          const mediaId = audioObj?.id || (message[message.type]?.id);
+
           if (mediaId) {
             console.log(`[WhatsApp Bot] Downloading audio media ${mediaId} from Meta...`);
             const audioData = await downloadWhatsAppMedia(mediaId);
@@ -387,8 +413,8 @@ export async function POST(req: NextRequest) {
           }
 
           if (!msg_body) {
-            console.log(`[WhatsApp Bot] Audio download/transcription failed. Sending fallback baffle reply.`);
-            const fallback = "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏";
+            console.log(`[WhatsApp Bot] Audio inaudible/garbled or failed. Sending polite request.`);
+            const fallback = "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
             await sendWhatsAppMessage(from, fallback);
             return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
           }
@@ -577,7 +603,7 @@ ${userPromptText}
             if (isVoiceNote) {
               await sendWhatsAppMessage(
                 from,
-                "خويا راني خاسر ليا الباف، عفاك كتب ليا فالميساج ديالك 🙏"
+                "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏"
               );
             } else {
               await sendWhatsAppMessage(
