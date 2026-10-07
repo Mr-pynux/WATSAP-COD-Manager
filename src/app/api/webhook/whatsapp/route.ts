@@ -713,11 +713,16 @@ ${userPromptText}
               const singleCaption = cleanText.length > 1000 ? cleanText.slice(0, 997) + "..." : cleanText;
               await sendWhatsAppImage(from, imagesToSend[0].url, singleCaption);
             } else if (imagesToSend.length > 1) {
-              // Multiple images: send all product photos with clear badges
+              // Multiple images: send all product photos FIRST
               for (const item of imagesToSend) {
                 await sendWhatsAppImage(from, item.url, item.caption);
+                // 500ms spacing between photos
+                await new Promise((r) => setTimeout(r, 500));
               }
-              // Send the complete conversational message
+              // Wait 1.5 seconds to guarantee WhatsApp finishes delivering all media messages before sending the text
+              await new Promise((r) => setTimeout(r, 1500));
+
+              // Then send the conversational and informational message right underneath the photos
               if (cleanText) {
                 await sendWhatsAppMessage(from, cleanText);
               }
