@@ -170,33 +170,19 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string;
       return null;
     }
 
-    // 2. Download media bytes, safely following any redirects with Authorization header
+    // 2. Download media bytes, safely following any redirects
     let targetUrl = metaData.url;
     let mediaRes = await fetch(targetUrl, {
-      redirect: "manual",
       headers: {
         Authorization: `Bearer ${token}`,
         "User-Agent": "curl/7.64.1",
       },
     });
 
-    if (mediaRes.status >= 300 && mediaRes.status < 400) {
-      const redirectLocation = mediaRes.headers.get("location");
-      if (redirectLocation) {
-        mediaRes = await fetch(redirectLocation, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "User-Agent": "curl/7.64.1",
-          },
-        });
-      }
-    }
-
-    if (!mediaRes.ok && mediaRes.status !== 200) {
-      // Direct retry with default redirect following
-      mediaRes = await fetch(metaData.url, {
+    if (!mediaRes.ok) {
+      // Retry without Authorization (Facebook CDN lookaside URLs often reject auth headers)
+      mediaRes = await fetch(targetUrl, {
         headers: {
-          Authorization: `Bearer ${token}`,
           "User-Agent": "curl/7.64.1",
         },
       });
@@ -225,31 +211,34 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+  // Use gemini-3.8-flash first for high-accuracy Moroccan Darija audio transcription, with robust fallbacks
+  const modelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mimeType,
-          data: base64Audio,
+  for (const modelName of modelsToTry) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: mimeType || "audio/ogg",
+            data: base64Audio,
+          },
         },
-      },
-      "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
-    ]);
+        "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
+      ]);
 
-    const text = result.response.text().trim();
-    if (!text || text.length < 2) return null;
-    return text;
-  } catch (err) {
-    console.error("[WhatsApp Transcription] Error transcribing audio with Gemini:", err);
-    notifyAdminError({
-      context: "تفريغ التسجيل الصوتي (Voice Note Transcription - Gemini)",
-      error: err,
-    }).catch(() => {});
-    return null;
+      const text = result.response.text().trim();
+      if (text && text.length >= 2) {
+        return text;
+      }
+    } catch (err: any) {
+      console.warn(`[WhatsApp Transcription] Attempt with ${modelName} failed:`, err?.message || err);
+    }
   }
+
+  return null;
 }
 
 // Function to analyze images sent by customers (identifies product model and any written size)
@@ -963,21 +952,41 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 • إذا سألك عن الأعطال والسيستيم التقني والكود:
   - طمئنه بأن السيستيم والويب هوك والذكاء الاصطناعي شغال 100% وبدون أعطال.
   - إذا سألك عن الكود أو الإضافات: اشرح له بلغة واضحة ما تم تطويره (دمج طلبيات العروض في طلبية واحدة في قاعدة البيانات، نظام تفاصيل الطلب برقم الهاتف والواتساب المباشر، نظام تسجيل الشكايات التلقائي، واجهات الإدارة المتطورة).
-• ⚡ تنفيذ الأوامر الإدارية (ADMIN COMMANDS):
-  - إذا أمرك بتعديل حالة طلبية، مثل: "بدل الطلبية 21 لـ confirmed"، "لغي الطلب 25"، "دير للطلب 21 shipped":
-    أكد له التنفيذ في ردك، وأضف التاغ التالي حصراً في نهاية الرسالة:
-    [UPDATE_ORDER_STATUS: {"order_number": رقم_الطلبية, "status": "الحالة_الجديدة", "note": "تعديل عبر واتساب بواسطة سي أيوب"}]
-    الحالات المسموحة: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned)
-  - إذا أمرك بحل شكاية:
-    [UPDATE_RECLAMATION: {"id": "معرف_الشكاية", "status": "resolved"}]
+• ⚡ تنفيذ الأوامر والتحكم الكامل في المتجر من الواتساب (REMOTE STORE COMMANDS):
+  سي أيوب يتواصل معك من هاتفه بدون حاسوب، ولديك كامل الصلاحيات لتنفيذ أي تعديل أو إصلاح يطلبه فوراً:
+  1. تغيير حالة أو إلغاء/تأكيد أي طلبية:
+     [UPDATE_ORDER_STATUS: {"order_number": رقم_الطلبية, "status": "الحالة_الجديدة", "note": "تعديل عبر واتساب بواسطة سي أيوب"}]
+     الحالات: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned)
+  2. تعديل معلومات طلبية (مدينة، اسم، هاتف، ملاحظة):
+     [UPDATE_ORDER: {"order_number": رقم_الطلبية, "city": "المدينة", "notes": "ملاحظة"}]
+  3. تعديل السطوك والمخزون لأي نمرة وموديل:
+     [UPDATE_STOCK: {"product_name": "اسم_الموديل", "size": "النمرة", "quantity": العدد}]
+  4. حل أو إغلاق شكاية:
+     [UPDATE_RECLAMATION: {"id": "معرف_الشكاية", "status": "resolved"}]
+  5. حظر رقم مسيء (Blacklist):
+     [BLACKLIST_PHONE: {"phone": "رقم_الهاتف", "reason": "السبب"}]
+  6. تصفير أو إعادة ضبط محادثة زبون:
+     [RESET_CHAT: {"phone": "رقم_الهاتف"}]
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+    let aiResponse = "";
+    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+    for (const mName of adminModelsToTry) {
+      try {
+        const model = genAI.getGenerativeModel({ model: mName });
+        const result = await model.generateContent(adminPrompt);
+        aiResponse = result.response.text();
+        if (aiResponse) break;
+      } catch (err: any) {
+        console.warn(`[Admin Assistant] ${mName} generation failed:`, err?.message || err);
+      }
+    }
 
-    const result = await model.generateContent(adminPrompt);
-    let aiResponse = result.response.text();
+    if (!aiResponse) {
+      throw new Error("Failed to generate response from all Gemini models");
+    }
 
     console.log(`[Admin Assistant] Reply for Si Ayoub:\n${aiResponse}`);
 
@@ -1023,6 +1032,103 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       }
     }
 
+    // Parse and execute UPDATE_ORDER tags (edit details)
+    const updateOrderTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_ORDER");
+    for (const tag of updateOrderTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const orderNum = parsed.order_number;
+        if (orderNum) {
+          const updates: any = {};
+          if (parsed.city) updates.city = parsed.city;
+          if (parsed.customer_name) updates.customer_name = parsed.customer_name;
+          if (parsed.phone) updates.phone = parsed.phone;
+          if (parsed.notes) updates.notes = parsed.notes;
+          if (parsed.status) updates.status = parsed.status;
+
+          await supabase.from("orders").update(updates).eq("order_number", orderNum);
+          console.log(`[Admin Action] Order #${orderNum} details updated`);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error updating order details from admin tag:", err);
+      }
+    }
+
+    // Parse and execute UPDATE_STOCK tags
+    const stockTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_STOCK");
+    for (const tag of stockTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const prodName = (parsed.product_name || parsed.name || "").trim().toLowerCase();
+        const size = String(parsed.size || "").trim();
+        const qty = String(parsed.quantity ?? parsed.qty ?? 0);
+
+        if (prodName && size) {
+          const { data: matchedProds } = await supabase.from("products").select("id, name, stock_by_size");
+          const target = matchedProds?.find((p) => p.name.toLowerCase().includes(prodName) || prodName.includes(p.name.toLowerCase()));
+          if (target) {
+            const updatedStock = { ...(target.stock_by_size || {}) };
+            updatedStock[size] = qty;
+            await supabase.from("products").update({ stock_by_size: updatedStock }).eq("id", target.id);
+            console.log(`[Admin Action] Updated stock for ${target.name} size ${size} -> ${qty}`);
+          }
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error updating stock from admin tag:", err);
+      }
+    }
+
+    // Parse and execute BLACKLIST_PHONE tags
+    const blacklistTags = extractJsonObjectsFromTag(aiResponse, "BLACKLIST_PHONE");
+    for (const tag of blacklistTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        let phone = (parsed.phone || "").replace(/\D/g, "");
+        if (phone.startsWith("212") && phone.length === 12) phone = "0" + phone.slice(3);
+        const reason = parsed.reason || "إضافة بواسطة سي أيوب عبر الواتساب";
+
+        if (phone) {
+          const { data: existing } = await supabase.from("blacklist").select("id, strikes, reasons").eq("phone", phone).maybeSingle();
+          if (existing) {
+            const currentReasons = Array.isArray(existing.reasons) ? existing.reasons : [];
+            await supabase.from("blacklist").update({
+              strikes: (existing.strikes || 1) + 1,
+              reasons: [...currentReasons, reason],
+            }).eq("id", existing.id);
+          } else {
+            await supabase.from("blacklist").insert({
+              phone,
+              strikes: 1,
+              reasons: [reason],
+            });
+          }
+          console.log(`[Admin Action] Blacklisted phone ${phone}`);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error blacklisting from admin tag:", err);
+      }
+    }
+
+    // Parse and execute RESET_CHAT tags
+    const resetTags = extractJsonObjectsFromTag(aiResponse, "RESET_CHAT");
+    for (const tag of resetTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        let targetPhone = (parsed.phone || "").replace(/\D/g, "");
+        if (targetPhone.startsWith("0")) targetPhone = "212" + targetPhone.slice(1);
+        if (targetPhone) {
+          await supabase.from("chat_sessions").update({ status: "archived" }).eq("phone", targetPhone);
+          console.log(`[Admin Action] Reset chat session for ${targetPhone}`);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error resetting chat session from admin tag:", err);
+      }
+    }
+
     // Parse and execute UPDATE_RECLAMATION tags
     const recTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_RECLAMATION");
     for (const tag of recTags) {
@@ -1043,6 +1149,10 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
     const cleanAdminReply = aiResponse
       .replace(/\[UPDATE_ORDER_STATUS:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[UPDATE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[UPDATE_STOCK:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[BLACKLIST_PHONE:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[RESET_CHAT:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_RECLAMATION:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[SEND_IMAGE:\s*https?:\/\/[^\s\]]+\]/gi, "")
       .trim();
@@ -1137,7 +1247,17 @@ export async function POST(req: NextRequest) {
 
             if (!msg_body) {
               console.log(`[WhatsApp Bot] Audio inaudible/garbled or failed. Sending polite request.`);
-              const fallback = "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
+              const cleanFrom = from.replace(/\D/g, "");
+              const adminClean = ADMIN_PHONE.replace(/\D/g, "");
+              const isAdminCaller =
+                cleanFrom === "212610026260" ||
+                cleanFrom === adminClean ||
+                (adminClean.startsWith("212") && cleanFrom === "0" + adminClean.slice(3));
+
+              const fallback = isAdminCaller
+                ? "سمح لي سي أيوب، الصوت ما كانش واضح مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج وها أنا معاك أ شاف نقاد ليك كلشي 🙏"
+                : "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
+
               await sendWhatsAppMessage(from, fallback);
               return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
             }
