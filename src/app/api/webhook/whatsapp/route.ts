@@ -113,6 +113,47 @@ async function sendWhatsAppMessage(to: string, text: string) {
   }
 }
 
+// Admin Phone Number for Technical Alerts & Bot Crashes
+const ADMIN_PHONE = (process.env.ADMIN_WHATSAPP_PHONE || "212610026260").replace(/\D/g, "");
+
+// Function to alert Admin on WhatsApp whenever any code or bot error occurs
+async function notifyAdminError({
+  context,
+  error,
+  customerPhone,
+  incomingMessage,
+}: {
+  context: string;
+  error: any;
+  customerPhone?: string;
+  incomingMessage?: string;
+}) {
+  try {
+    const errString =
+      error instanceof Error
+        ? `${error.name}: ${error.message}\n${error.stack?.split("\n").slice(0, 4).join("\n") || ""}`
+        : typeof error === "object"
+        ? JSON.stringify(error, null, 2)
+        : String(error);
+
+    const timeStr = new Date().toLocaleString("fr-FR", { timeZone: "Africa/Casablanca" });
+
+    const alertText =
+      `🚨 *تنبيه فوري: خطأ تقني في البوت (BOT ERROR ALERT)* 🚨\n\n` +
+      `📍 *المكان / السياق:* ${context}\n` +
+      (customerPhone ? `👤 *رقم الزبون المتأثر:* ${customerPhone}\n` : "") +
+      (incomingMessage ? `💬 *الرسالة الواردة:* "${incomingMessage.slice(0, 100)}"\n` : "") +
+      `⏰ *الوقت:* ${timeStr}\n\n` +
+      `❌ *الخطأ التقني:*\n\`\`\`\n${errString.slice(0, 600)}\n\`\`\`\n\n` +
+      `⚠️ المرجو تفقد النظام على وجه السرعة لحل المشكل.`;
+
+    await sendWhatsAppMessage(ADMIN_PHONE, alertText);
+    console.log(`[Admin Alert] Dispatched WhatsApp error alert to Admin (${ADMIN_PHONE}) for: ${context}`);
+  } catch (err) {
+    console.error("[Admin Alert] Failed to send WhatsApp error to admin:", err);
+  }
+}
+
 // Function to download media (audio / voice notes) from WhatsApp Cloud API
 async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string; mimeType: string } | null> {
   const token = process.env.WHATSAPP_API_TOKEN?.trim();
@@ -203,6 +244,10 @@ async function transcribeAudioWithGemini(
     return text;
   } catch (err) {
     console.error("[WhatsApp Transcription] Error transcribing audio with Gemini:", err);
+    notifyAdminError({
+      context: "تفريغ التسجيل الصوتي (Voice Note Transcription - Gemini)",
+      error: err,
+    }).catch(() => {});
     return null;
   }
 }
@@ -250,6 +295,10 @@ ${catalogBrief}
     return { details: text, detectedSize };
   } catch (err) {
     console.error("[WhatsApp Image Analysis] Error with Gemini:", err);
+    notifyAdminError({
+      context: "تحليل صورة الزبون (Gemini Vision Image Analysis)",
+      error: err,
+    }).catch(() => {});
     return null;
   }
 }
@@ -483,6 +532,11 @@ async function createOrderFromWhatsApp({
 
       if (error || !order) {
         console.error("Error creating order from WhatsApp item:", error);
+        notifyAdminError({
+          context: "إنشاء طلبية في قاعدة البيانات (Supabase Order Insert Error)",
+          error: error || "No order returned",
+          customerPhone: cleanPhone,
+        }).catch(() => {});
         continue;
       }
 
@@ -508,6 +562,61 @@ async function createOrderFromWhatsApp({
     };
   } catch (err) {
     console.error("Exception creating order:", err);
+    notifyAdminError({
+      context: "استثناء أثناء تسجيل الطلبية (createOrderFromWhatsApp Exception)",
+      error: err,
+      customerPhone: phone,
+    }).catch(() => {});
+    return null;
+  }
+}
+
+// Helper to log customer complaints / reclamations into Supabase
+async function logReclamationFromWhatsApp({
+  name,
+  phone,
+  type,
+  issue,
+}: {
+  name?: string;
+  phone: string;
+  type?: string;
+  issue: string;
+}) {
+  try {
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.startsWith("212") && cleanPhone.length === 12) {
+      cleanPhone = "0" + cleanPhone.slice(3);
+    }
+
+    const { data, error } = await supabase
+      .from("reclamations")
+      .insert({
+        customer_name: (name || "زبون").trim(),
+        phone: cleanPhone,
+        type: type || "other",
+        issue: issue.trim(),
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.warn("[Reclamation] Table might not exist or error:", error.message);
+      // Fallback: flag session as handed_to_human so merchant sees it
+      await supabase
+        .from("chat_sessions")
+        .update({
+          status: "handed_to_human",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("phone", phone);
+    }
+
+    console.log(`[Reclamation Logged] Claim recorded for ${cleanPhone}: "${issue.slice(0, 50)}"`);
+    return data?.id || null;
+  } catch (err) {
+    console.error("Error logging reclamation:", err);
     return null;
   }
 }
@@ -878,16 +987,57 @@ ${userPromptText}
         • مدن الجنوب (العيون، الداخلة...) والمدن والمراكز الصغرى: من يومين حتى لـ 3 أيام.
         • إذا طلب اليوم والساعة بالضبط: "غادي يتواصل معاك الموزع (الليفرور) فـ أقرب وقت باش يحدد معاك الساعة بالضبط ويوصلها ليك حتى لباب الدار."
       - إذا سألك الكليان: "معاش غادي يتواصل معايا المسؤول / فريق التأكيد؟":
-        جاوبه حصراً: "ما بين 2 ديال النهار حتى لـ 5 ديال العشية إن شاء الله."`;
+        جاوبه حصراً: "ما بين 2 ديال النهار حتى لـ 5 ديال العشية إن شاء الله."
+
+   🔹 المرحلة 5 (التعامل الذكي مع الشكايات والتبديل والاستفسارات المعقدة - RECLAMATIONS):
+      - إذا تواصل الزبون بشكاية، أو مشكل في طلبية سابقة، أو رغبة في استبدال المقاس (ما جاهش المقاس)، أو عيب في السلعة، أو تأخر التوصيل، أو رغبة في التحدث مباشرة مع المسؤول:
+        1. استقبله بلباقة تامة واعتذر منه بلطف وهدئ من روعه:
+           "على الراس والعين أخويا، ما يكون غير خاطرك وما تقلقش نهائياً، حنا كنتحملو كامل المسؤولية!"
+        2. وضح له أن المسؤول سيتصل به هاتفياً لحل المشكل:
+           "راني سجلت الشكاية ديالك دابا فـ السيستيم، وغادي يتواصل معاك المسؤول هاتفياً فـ أقرب وقت باش يحل المشكل ديالك ويرتب معاك الأمور إن شاء الله 🙏"
+        3. ضع تاغ تسجيل الشكاية في النظام:
+           [LOG_RECLAMATION: {"customer_name": "${previousCustomerName || 'زبون'}", "phone": "${phone06}", "type": "exchange", "issue": "تفاصيل المشكل كما ذكره الزبون"}]
+           (الأنواع المتاحة: exchange للتبديل، return للاسترجاع، delivery_delay لتأخر التوصيل، product_defect لعيب بالسلعة، cancellation للإلغاء، other لأخرى).`;
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
 
-            const result = await model.generateContent(prompt);
-            let aiResponse = result.response.text();
+            let aiResponse = "";
+            try {
+              const result = await model.generateContent(prompt);
+              aiResponse = result.response.text();
+            } catch (genErr) {
+              console.error("[WhatsApp Bot] Gemini generateContent failed:", genErr);
+              await notifyAdminError({
+                context: "توليد رد البوت عبر Gemini (generateContent Failure)",
+                error: genErr,
+                customerPhone: from,
+                incomingMessage: msg_body,
+              });
+              const fallbackMsg = "سمح لي أخويا، كاين واحد الضغط خفيف فالسيستيم دابا، راني معاك وكنقاد ليك الطلبية ديالك على الراس والعين 🙏";
+              await sendWhatsAppMessage(from, fallbackMsg);
+              return NextResponse.json({ status: "AI_ERROR_HANDLED" }, { status: 200 });
+            }
 
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
+
+            // Check if AI requested logging a customer reclamation
+            const recMatch = aiResponse.match(/\[LOG_RECLAMATION:\s*(\{[\s\S]*?\})\]/);
+            if (recMatch && recMatch[1]) {
+              try {
+                const recData = JSON.parse(recMatch[1]);
+                await logReclamationFromWhatsApp({
+                  name: recData.customer_name || previousCustomerName,
+                  phone: recData.phone || from,
+                  type: recData.type,
+                  issue: recData.issue || "شكاية زبون",
+                });
+                aiResponse = aiResponse.replace(/\[LOG_RECLAMATION:\s*\{[\s\S]*?\}\]/g, "").trim();
+              } catch (recErr) {
+                console.error("Error parsing LOG_RECLAMATION JSON:", recErr);
+              }
+            }
 
             // Check if AI requested creating an order
             // Supports both single item and multi-item bundles across one or multiple tags
@@ -912,6 +1062,12 @@ ${userPromptText}
                   }
                 } catch (parseErr) {
                   console.error("Error parsing CREATE_ORDER JSON chunk:", parseErr);
+                  notifyAdminError({
+                    context: "خطأ في قراءة بيانات الطلب (CREATE_ORDER Parse Error)",
+                    error: parseErr,
+                    customerPhone: from,
+                    incomingMessage: match[1],
+                  }).catch(() => {});
                 }
               }
 
@@ -941,6 +1097,13 @@ ${userPromptText}
                       .update({ order_id: orderResult.primaryOrderId, updated_at: new Date().toISOString() })
                       .eq("id", sessionId);
                   }
+                } else {
+                  await notifyAdminError({
+                    context: "فشل إنشاء الطلب في قاعدة البيانات (createOrder returned null)",
+                    error: "createOrderFromWhatsApp returned null",
+                    customerPhone: from,
+                    incomingMessage: msg_body,
+                  });
                 }
               }
             }
@@ -1055,6 +1218,12 @@ ${userPromptText}
             }
           } catch (aiError) {
             console.error("AI Generation Error:", aiError);
+            await notifyAdminError({
+              context: "معالجة رسالة المحادثة (Conversation Turn Error)",
+              error: aiError,
+              customerPhone: from,
+              incomingMessage: msg_body,
+            });
             if (isVoiceNote) {
               await sendWhatsAppMessage(
                 from,
@@ -1079,6 +1248,10 @@ ${userPromptText}
   }
 } catch (error) {
   console.error("Webhook error:", error);
+  await notifyAdminError({
+    context: "خطأ عام في الويب هوك (WhatsApp Webhook Global Error)",
+    error: error,
+  });
   return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
 }
 }

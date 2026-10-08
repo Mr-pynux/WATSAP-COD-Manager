@@ -21,6 +21,7 @@ import {
   BarChart3,
   Bot,
   FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ const NAV = [
   { href: "/admin", label: "الرئيسية", icon: Home, exact: true },
   { href: "/admin/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/admin/followup", label: "المتابعة", icon: PhoneCall, badge: true },
+  { href: "/admin/reclamations", label: "الشكايات والتبديل", icon: AlertCircle },
   { href: "/admin/finance", label: "المالية", icon: Wallet },
   { href: "/admin/inventory", label: "شيت المخزون", icon: FileSpreadsheet, more: true },
   { href: "/admin/products", label: "المنتجات (كروت)", icon: Package, more: true },
@@ -66,11 +68,13 @@ const TITLES: Record<string, string> = {
   "/admin": "الرئيسية",
   "/admin/orders": "الطلبات",
   "/admin/followup": "المتابعة",
+  "/admin/reclamations": "الشكايات والتبديل",
   "/admin/finance": "المالية",
   "/admin/products": "المنتجات",
   "/admin/blacklist": "البلاك ليست",
   "/admin/couriers": "الناقلين",
   "/admin/templates": "الرسائل",
+  "/admin/bot": "إعدادات البوت",
 };
 
 function pageTitle(pathname: string): string {

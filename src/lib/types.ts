@@ -99,3 +99,30 @@ export interface KpisResponse {
   followupCount: number;
   latestOrders: OrderDTO[];
 }
+
+export type ReclamationType = "exchange" | "return" | "delivery_delay" | "product_defect" | "cancellation" | "other";
+export type ReclamationStatus = "pending" | "contacted" | "resolved" | "dismissed";
+
+export interface ReclamationDTO {
+  id: string;
+  customerName: string;
+  phone: string;
+  orderId?: string | null;
+  type: ReclamationType;
+  issue: string;
+  status: ReclamationStatus;
+  adminNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReclamationsResponse {
+  reclamations: ReclamationDTO[];
+  total: number;
+  counts: {
+    total: number;
+    pending: number;
+    contacted: number;
+    resolved: number;
+  };
+}
