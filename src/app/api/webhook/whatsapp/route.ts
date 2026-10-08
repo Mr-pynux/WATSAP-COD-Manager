@@ -207,6 +207,53 @@ async function transcribeAudioWithGemini(
   }
 }
 
+// Function to analyze images sent by customers (identifies product model and any written size)
+async function analyzeIncomingImageWithGemini(
+  base64Image: string,
+  mimeType: string,
+  apiKey: string,
+  products: Array<{ id: string; name: string }>
+): Promise<{ details: string; detectedSize: string | null } | null> {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+
+    const catalogBrief = products.map((p) => `- ${p.name} (معرف: ${p.id})`).join("\n");
+
+    const prompt = `أنت خبير فحص صور أحذية رياضية لمتجر Shoespot.
+الموديلات المتوفرة في المتجر هي:
+${catalogBrief}
+
+المطلوب منك:
+1. هل الحذاء الظاهر في الصورة يطابق أو يشبه أحد الموديلات أعلاه؟ (مثلاً "حذاء رياضي COBRA" باللون الأسود أو "حداء new balance").
+2. هل يوجد أي رقم مقاس (مثل 39, 40, 41, 42, 43, 44) مكتوب على الصورة أو في الحذاء؟
+
+أجب بدقة باختصار شديد في سطر واحد فقط بدون مقدمات:
+مثال: "حذاء رياضي COBRA (المقاس المكتوب بالصورة: 42)" أو "حداء new balance" أو "حذاء رياضي غير محدد".`;
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType || "image/jpeg",
+          data: base64Image,
+        },
+      },
+      prompt,
+    ]);
+
+    const text = result.response.text().trim();
+    if (!text) return null;
+
+    const sizeMatch = text.match(/\b(3[8-9]|4[0-6])\b/);
+    const detectedSize = sizeMatch ? sizeMatch[0] : null;
+
+    return { details: text, detectedSize };
+  } catch (err) {
+    console.error("[WhatsApp Image Analysis] Error with Gemini:", err);
+    return null;
+  }
+}
+
 const VERIFY_TOKEN = (process.env.META_VERIFY_TOKEN || "watsap_cod_token").trim();
 
 export async function GET(req: NextRequest) {
@@ -285,7 +332,26 @@ async function saveChatMessage(sessionId: string, role: "user" | "assistant", co
   }
 }
 
-// Helper to create an order in Supabase directly from WhatsApp
+interface CreateOrderItemInput {
+  productId?: string;
+  size?: string;
+  color?: string;
+  quantity?: number;
+}
+
+interface CreateOrderFromWhatsAppParams {
+  name: string;
+  phone: string;
+  city: string;
+  address?: string;
+  size?: string;
+  color?: string;
+  quantity?: number;
+  productId?: string;
+  items?: CreateOrderItemInput[];
+}
+
+// Helper to create order(s) in Supabase directly from WhatsApp (supports single or multi-item bundles)
 async function createOrderFromWhatsApp({
   name,
   phone,
@@ -295,37 +361,39 @@ async function createOrderFromWhatsApp({
   color,
   quantity,
   productId,
-}: {
-  name: string;
-  phone: string;
-  city: string;
-  address?: string;
-  size: string;
-  color?: string;
-  quantity?: number;
-  productId?: string;
-}) {
+  items,
+}: CreateOrderFromWhatsAppParams) {
   try {
-    // 1. Fetch active product
-    let query = supabase.from("products").select("id, price_mad, offer_qty, offer_total_mad");
-    if (productId) {
-      query = query.eq("id", productId);
-    } else {
-      query = query.eq("active", true).limit(1);
-    }
-    const { data: products } = await query;
-    const product = products?.[0];
+    // 1. Fetch active products
+    const { data: allProducts } = await supabase
+      .from("products")
+      .select("id, name, price_mad, offer_qty, offer_total_mad")
+      .eq("active", true);
 
-    if (!product) {
-      console.error("No product found to create order");
+    if (!allProducts || allProducts.length === 0) {
+      console.error("No active products found to create order");
       return null;
     }
 
-    const qty = quantity || 1;
-    let unitPrice = Number(product.price_mad);
-    if (product.offer_qty && product.offer_total_mad && qty >= product.offer_qty) {
-      unitPrice = Number(product.offer_total_mad) / product.offer_qty;
+    // 2. Normalize items list
+    let itemList: CreateOrderItemInput[] = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      itemList = items;
+    } else {
+      itemList = [
+        {
+          productId: productId,
+          size: size || "42",
+          color: color,
+          quantity: quantity || 1,
+        },
+      ];
     }
+
+    // 3. Compute bundle pricing across all items (2 for 240 MAD = 120 MAD each)
+    const totalQty = itemList.reduce((sum, it) => sum + (it.quantity || 1), 0);
+    const isBundle = totalQty >= 2;
+    const unitPrice = isBundle ? 120 : 150;
 
     // Clean phone number (format as 06... or 07...)
     let cleanPhone = phone.replace(/\D/g, "");
@@ -361,40 +429,83 @@ async function createOrderFromWhatsApp({
     if (!resolvedName) resolvedName = "زبون واتساب";
     if (!resolvedCity) resolvedCity = "المغرب";
 
-    const { data: order, error } = await supabase
-      .from("orders")
-      .insert({
-        customer_name: resolvedName,
-        phone: cleanPhone,
-        city: resolvedCity,
-        district: resolvedAddress || null,
-        product_id: product.id,
-        size: size || "42",
-        color: color || null,
-        quantity: qty,
-        unit_price_mad: unitPrice,
-        payment_method: "cod",
-        status: "confirmed_continuous",
-        confirmed_at: new Date().toISOString(),
-        notes: resolvedAddress ? `العنوان: ${resolvedAddress} (تأكيد واتساب بوت)` : "تم الطلب والتأكيد عبر واتساب بوت (AI)",
-      })
-      .select("id, order_number")
-      .single();
+    const createdOrderNumbers: number[] = [];
+    const createdOrderIds: string[] = [];
 
-    if (error || !order) {
-      console.error("Error creating order from WhatsApp:", error);
-      return null;
+    for (let i = 0; i < itemList.length; i++) {
+      const it = itemList[i];
+
+      // Find matched product
+      let matchedProduct = allProducts.find((p) => p.id === it.productId);
+      if (!matchedProduct && it.productId) {
+        const pLower = it.productId.toLowerCase();
+        matchedProduct = allProducts.find(
+          (p) =>
+            p.name.toLowerCase().includes(pLower) ||
+            (pLower.includes("cobra") && p.name.toLowerCase().includes("cobra")) ||
+            (pLower.includes("balance") && p.name.toLowerCase().includes("balance"))
+        );
+      }
+      if (!matchedProduct) {
+        matchedProduct = allProducts[0];
+      }
+
+      // Clean size: extract numeric value like "40" from "40" or "مقاس 40"
+      const sizeMatch = String(it.size || "").match(/\b(3[8-9]|4[0-6])\b/);
+      const cleanSize = sizeMatch ? sizeMatch[0] : (it.size || "42").trim();
+      const itemQty = it.quantity || 1;
+
+      const bundleTag = isBundle
+        ? `[عرض 2 بـ 240 درهم: حذاء ${i + 1}/${itemList.length} - ${matchedProduct.name} مقاس ${cleanSize}]`
+        : `[${matchedProduct.name} مقاس ${cleanSize}]`;
+
+      const { data: order, error } = await supabase
+        .from("orders")
+        .insert({
+          customer_name: resolvedName,
+          phone: cleanPhone,
+          city: resolvedCity,
+          district: resolvedAddress || null,
+          product_id: matchedProduct.id,
+          size: cleanSize,
+          color: it.color || null,
+          quantity: itemQty,
+          unit_price_mad: unitPrice,
+          payment_method: "cod",
+          status: "confirmed_continuous",
+          confirmed_at: new Date().toISOString(),
+          notes: resolvedAddress
+            ? `العنوان: ${resolvedAddress} - ${bundleTag}`
+            : `تم الطلب والتأكيد عبر واتساب بوت - ${bundleTag}`,
+        })
+        .select("id, order_number")
+        .single();
+
+      if (error || !order) {
+        console.error("Error creating order from WhatsApp item:", error);
+        continue;
+      }
+
+      // Insert order event
+      await supabase.from("order_events").insert({
+        order_id: order.id,
+        type: "created",
+        detail: { source: "whatsapp_bot", channel: "meta_cloud_api", item_index: i + 1, total_items: itemList.length },
+      });
+
+      createdOrderNumbers.push(order.order_number);
+      createdOrderIds.push(order.id);
+      console.log(`[Order Created] Order #${order.order_number} (${matchedProduct.name} size ${cleanSize}) registered from WhatsApp for ${resolvedName} (${cleanPhone})!`);
     }
 
-    // Insert order event
-    await supabase.from("order_events").insert({
-      order_id: order.id,
-      type: "created",
-      detail: { source: "whatsapp_bot", channel: "meta_cloud_api" },
-    });
+    if (createdOrderNumbers.length === 0) return null;
 
-    console.log(`[Order Created] Order #${order.order_number} successfully registered from WhatsApp for ${name} (${cleanPhone})!`);
-    return { orderNumber: order.order_number, orderId: order.id };
+    return {
+      orderNumber: createdOrderNumbers[0],
+      orderId: createdOrderIds[0],
+      orderNumbers: createdOrderNumbers,
+      orderIds: createdOrderIds,
+    };
   } catch (err) {
     console.error("Exception creating order:", err);
     return null;
@@ -417,7 +528,9 @@ export async function POST(req: NextRequest) {
         const messageId = message.id;
         let msg_body = message.text?.body;
         const isAudio = message.type === "audio" || message.type === "voice" || !!message.audio || !!message.voice;
+        const isImage = message.type === "image" || !!message.image;
         let isVoiceNote = false;
+        let isImageMessage = false;
 
         // 🛑 STRICT 1-TO-1 DEDUPLICATION 1: Meta Message ID (wamid)
         if (messageId) {
@@ -474,13 +587,45 @@ export async function POST(req: NextRequest) {
               await sendWhatsAppMessage(from, fallback);
               return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
             }
+          } else if (isImage) {
+            const imageObj = message.image;
+            const caption = imageObj?.caption?.trim() || "";
+            const mediaId = imageObj?.id || (message[message.type]?.id);
+
+            let imageAnalysisText = "";
+            if (mediaId) {
+              console.log(`[WhatsApp Bot] Downloading customer image ${mediaId} from Meta...`);
+              const imageData = await downloadWhatsAppMedia(mediaId);
+              if (imageData) {
+                const apiKey = process.env.AI_API_KEY?.trim() || "";
+                const { data: prods } = await supabase.from("products").select("id, name").eq("active", true);
+                const analysis = await analyzeIncomingImageWithGemini(imageData.base64, imageData.mimeType, apiKey, prods || []);
+                if (analysis?.details) {
+                  imageAnalysisText = analysis.details;
+                  console.log(`[WhatsApp Bot] Image analyzed with Gemini: "${imageAnalysisText}"`);
+                }
+              }
+            }
+
+            if (imageAnalysisText && caption) {
+              msg_body = `🖼️ [صورة أرسلها الزبون لموديل: ${imageAnalysisText}] مع تعليق مرفق: "${caption}"`;
+            } else if (imageAnalysisText) {
+              msg_body = `🖼️ [صورة أرسلها الزبون لموديل: ${imageAnalysisText}]`;
+            } else if (caption) {
+              msg_body = `🖼️ [صورة حذاء أرسلها الزبون] مع تعليق مرفق: "${caption}"`;
+            } else {
+              msg_body = `🖼️ [أرسل الزبون صورة حذاء يسأل عن توفره ومقاساته في المتجر]`;
+            }
+            isImageMessage = true;
           }
 
           if (msg_body) {
             try {
               // 1. Get or create chat session for this customer
               const sessionId = await getOrCreateSession(from);
-              const userHistoryMsg = isVoiceNote ? `🎙️ [أوديو]: "${msg_body}"` : msg_body;
+              const userHistoryMsg = isVoiceNote
+                ? `🎙️ [أوديو]: "${msg_body}"`
+                : msg_body;
 
               // 🛑 STRICT 1-TO-1 DEDUPLICATION 3: Database check (prevents duplicate retries across lambdas)
               if (sessionId) {
@@ -539,7 +684,6 @@ export async function POST(req: NextRequest) {
             const previousCustomerName = lastOrder?.customer_name?.trim();
             const previousCity = lastOrder?.city?.trim();
             const previousAddress = [lastOrder?.district, lastOrder?.landmark].filter(Boolean).join(" - ").trim() || previousCity;
-            const previousSize = lastOrder?.size?.trim();
 
             let customerProfileText = "";
             if (lastOrder && previousCustomerName && previousCity) {
@@ -548,7 +692,7 @@ export async function POST(req: NextRequest) {
 - المدينة المسجلة: ${previousCity}
 - العنوان السابق المسجل: ${previousAddress}
 - رقم الهاتف: ${phone06}
-${previousSize ? `- المقاس السابق الذي اشتراه: ${previousSize}` : ""}`;
+⚠️ أولوية قصوى للمقاس (النمرة): ممنوع نهائياً الاعتماد على أي مقاس قديم طلبه هذا الزبون في طلبيات سابقة! خذ دائماً المقاس الجديد الذي يطلبه الزبون في هذه المحادثة الحالية حصراً (لأن الزبائن يشترون أحياناً لأنفسهم أو لأبنائهم أو لأقاربهم بمقاسات مختلفة).`;
             } else {
               customerProfileText = `🌟 حالة هذا الزبون: زبون جديد (لا توجد طلبيات سابقة مسجلة له برقم الهاتف ${phone06}).`;
             }
@@ -648,6 +792,40 @@ ${userPromptText}
    - إذا سأل الزبون "علاش مكاتجاوبش؟" أو "واش مكاتجاوبش؟": جاوب بلباقة واختصار: "سمح لي أخويا على التعطيلة، راني معاك دابا على الراس والعين! شنو بغيتي تعرف بخصوص الطلبية ديالك؟" بدون اختلاق تبريرات شخصية.
    - لا تكرر الأسئلة ولا تكرر الكلام الذي سبق ذكره في المحادثة. رد باختصار مفيد وبدون حشو باش ما يضيعش التوكن.
 
+🚨 قواعد التركيز الشديد والأولوية القصوى للمقاسات والمعلومات (EXTREME ACCURACY & LATEST SIZE RULES):
+1. التركيز المطلق على معلومات الزبون:
+   - الاسم الكامل (customer_name)
+   - المدينة (city)
+   - العنوان الدقيق (الحي والشارع ومعلمة قريبة)
+   - رقم الهاتف (phone)
+   - 🔴 الأهم على الإطلاق: النمرة (القياس) ديال كل سبرديلة مطلوبة بدقة تامة!
+
+2. قاعدة القياس الأخير هي المعتمدة دائماً (LATEST SIZE IS GOLDEN TRUTH):
+   - المقاس المعتمد دائماً وأبداً هو آخر مقاس ذكره الزبون في هذه المحادثة الحالية!
+   - 🛑 ممنوع منعاً كلياً وباتاً اعتماد أو تكرار أو فرض أي مقاس قديم اشتراه الزبون في طلبيات سابقة (لأن الزبائن كيرجعو يشريو لناس خرين أو بمقاسات جديدة).
+   - إذا كان الزبون مسجلاً في النظام، أكّد معه فقط الاسم والمدينة والعنوان السابق، لكن المقاس خذه دائماً من كلامه الجديد في هذه المحادثة.
+   - إذا ذكر الزبون مقاساً في أول المحادثة ثم بدله أو غير رأيه (مثلاً: قال "40" ثم رجع قال "لا دير ليا 42" أو "غير النمرة لـ 43"): المعتمد حصراً وقطعاً هو آخر مقاس طلبه الزبون!
+   - افهم سياق المحادثة بذكاء وركز تركيزاً تاماً على آخر قياس لكل سبرديلة.
+
+3. ربط كل سبرديلة بمقاسها بدقة عند طلب أكثر من حذاء (عرض 2 بـ 240 درهم):
+   - الكليان يقدر يطلب موديلين مختلفين بمقاسين مختلفين (مثال: COBRA مقاس 40، و New Balance مقاس 43).
+   - أو يقدر يطلب نفس الموديل بمقاسين مختلفين (مثال: سبرديلة COBRA مقاس 39 لولدو، وسبرديلة COBRA مقاس 44 لراسو).
+   - 🛑 ممنوع نهائياً خلط المقاسات أو إعطاء نفس المقاس للموديلين إلا إذا طلب الزبون نفس المقاس صراحة!
+   - اربط كل موديل بمقاسه المطلوب بدقة واضحة ولا تخلط المقاسات نهائياً لكي لا تقع أي مشاكل عند تجهيز الطرود.
+
+4. التعامل الذكي مع الصور والأوديو (Voice Notes & Product Images):
+   - إذا أرسل الكليان صورة سبرديلة (مثلاً صورة New Balance أو صورة COBRA):
+     • تعرف على الموديل فوراً واربطه به.
+     • إذا كتب مع الصورة تعليقاً فيه النمرة (مثلاً 44 أو 43) أو أرسل أوديو فيه النمرة: اربط تلك النمرة بذلك الموديل فوراً.
+     • إذا أرسل صورة فقط بدون نمرة، رحب به وأكد له جودة الموديل وسوله على النمرة: "تبارك الله عليك أخويا، هاد الموديل ديال [الاسم] سلعة ممتازة ونقية! شحال النمرة اللي كتلبس؟".
+
+5. تلخيص وتأكيد كل التفاصيل بوضوح قبل/عند تسجيل الطلب (MANDATORY RECAP):
+   - عند تأكيد الطلب، لخص للكليان كل شيء بوضوح تام:
+     • الموديل الأول: [اسم الموديل] — النمرة: [المقاس] (واللون إن وجد).
+     • الموديل الثاني (إن وُجد): [اسم الموديل] — النمرة: [المقاس].
+     • الثمن الإجمالي: [150 درهم لـ حبة واحدة، أو 240 درهم لـ حبتين] — التوصيل فابور والدفع عند الاستلام بعد المعاينة.
+     • العنوان: [الاسم الكامل] — [المدينة] — [العنوان].
+
 2. خطوات المنهجية الرسمية لتأكيد الطلب والتعامل مع الموديلات والمقاسات:
    🔹 المرحلة 1 (فاش كيسول الكليان فـ الأول على الثمن أو السبرديلات المتوفرة عموماً):
       - عطه الثمن مباشرة: 150 درهم للوحدة، 2 بـ 240 درهم، والتوصيل فابور لجميع المدن والدفع عند الاستلام بعد المعاينة.
@@ -675,7 +853,9 @@ ${userPromptText}
             ولا تحب تغيرو لعنوان آخر؟"
          4. إذا وافق (قال "نعم"، "أه"، "نفس العنوان"، "هو هذاك"، "صيفط لنفس البلاصة"... إلخ):
             - سجل الطلبية فوراً بالمعلومات السابقة باستخدام تاغ:
-              [CREATE_ORDER: {"name": "${previousCustomerName || ''}", "city": "${previousCity || ''}", "address": "${previousAddress || ''}", "size": "المقاس_المختار", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار", "phone": "${phone06}"}]
+              [CREATE_ORDER: {"name": "${previousCustomerName || ''}", "city": "${previousCity || ''}", "address": "${previousAddress || ''}", "size": "المقاس_المختار_الجديد", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار", "phone": "${phone06}"}]
+              أو إذا كان حذائين (عرض 2 بـ 240 درهم):
+              [CREATE_ORDER: {"name": "${previousCustomerName || ''}", "city": "${previousCity || ''}", "address": "${previousAddress || ''}", "phone": "${phone06}", "items": [{"product_id": "معرف_الموديل_1", "size": "المقاس_1", "color": "اللون_1", "quantity": 1}, {"product_id": "معرف_الموديل_2", "size": "المقاس_2", "color": "اللون_2", "quantity": 1}]}]
             - وأخبره بتأكيد الطلبية: "صافي على الراس والعين أخويا ${previousCustomerName || ''}، سجلنا ليك الطلبية فـ نفس العنوان! غادي يتواصل معاك الموزع (الليفرور) فـ أقرب وقت باش يجيبها ليك حتى لباب الدار والتوصيل فابور والدفع عند الاستلام بعد المعاينة."
          5. إذا قال "لا بغيت نبدلو" أو ذكر مدينة وعنواناً جديدين:
             - سجل الطلبية بالمدينة والعنوان الجديدين اللذين ذكرهما.
@@ -688,6 +868,8 @@ ${userPromptText}
            • رقم الهاتف:
          - وعندما يزودك بها، لخصها له وأضف تاغ تسجيل الطلب:
            [CREATE_ORDER: {"name": "اسم_الزبون", "city": "المدينة", "address": "العنوان", "size": "المقاس", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار_من_الكتالوج", "phone": "رقم_الهاتف"}]
+           أو إذا كان حذائين (عرض 2 بـ 240 درهم):
+           [CREATE_ORDER: {"name": "اسم_الزبون", "city": "المدينة", "address": "العنوان", "phone": "رقم_الهاتف", "items": [{"product_id": "معرف_الموديل_1", "size": "المقاس_1", "color": "اللون_1", "quantity": 1}, {"product_id": "معرف_الموديل_2", "size": "المقاس_2", "color": "اللون_2", "quantity": 1}]}]
 
    🔹 المرحلة 4 (توضيح آجال التوصيل وتواصل فريق التأكيد):
       - وضح مدة التوصيل حسب مدينته:
@@ -708,36 +890,58 @@ ${userPromptText}
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
 
             // Check if AI requested creating an order
-            const orderMatch = aiResponse.match(/\[CREATE_ORDER:\s*(\{[\s\S]*?\})\]/);
-            if (orderMatch && orderMatch[1]) {
-              try {
-                const orderData = JSON.parse(orderMatch[1]);
+            // Supports both single item and multi-item bundles across one or multiple tags
+            const orderMatches = Array.from(aiResponse.matchAll(/\[CREATE_ORDER:\s*(\{[\s\S]*?\})\]/g));
+            if (orderMatches.length > 0) {
+              let combinedItems: CreateOrderItemInput[] = [];
+              let baseOrderData: any = null;
+
+              for (const match of orderMatches) {
+                try {
+                  const parsed = JSON.parse(match[1]);
+                  if (!baseOrderData) baseOrderData = parsed;
+                  if (parsed.items && Array.isArray(parsed.items)) {
+                    combinedItems.push(...parsed.items);
+                  } else if (parsed.product_id || parsed.size) {
+                    combinedItems.push({
+                      productId: parsed.product_id,
+                      size: parsed.size,
+                      color: parsed.color,
+                      quantity: parsed.quantity || 1,
+                    });
+                  }
+                } catch (parseErr) {
+                  console.error("Error parsing CREATE_ORDER JSON chunk:", parseErr);
+                }
+              }
+
+              if (baseOrderData) {
                 const orderResult = await createOrderFromWhatsApp({
-                  name: orderData.name,
-                  phone: orderData.phone || from,
-                  city: orderData.city,
-                  address: orderData.address || orderData.district,
-                  size: orderData.size,
-                  color: orderData.color,
-                  quantity: orderData.quantity || 1,
-                  productId: orderData.product_id,
+                  name: baseOrderData.name,
+                  phone: baseOrderData.phone || from,
+                  city: baseOrderData.city,
+                  address: baseOrderData.address || baseOrderData.district,
+                  items: combinedItems.length > 0 ? combinedItems : undefined,
+                  size: baseOrderData.size,
+                  color: baseOrderData.color,
+                  quantity: baseOrderData.quantity || 1,
+                  productId: baseOrderData.product_id,
                 });
 
-                // Remove the tag from user message and include order number confirmation
-                aiResponse = aiResponse.replace(/\[CREATE_ORDER:\s*\{[\s\S]*?\}\]/, "").trim();
-                if (orderResult) {
-                  aiResponse += `\n\n📌 رقم الطلبية ديالك فـ النظام: #${orderResult.orderNumber} ✅`;
+                // Remove all [CREATE_ORDER: ...] tags
+                aiResponse = aiResponse.replace(/\[CREATE_ORDER:\s*\{[\s\S]*?\}\]/g, "").trim();
+                if (orderResult && orderResult.orderNumbers.length > 0) {
+                  const orderNumsStr = orderResult.orderNumbers.map((n) => `#${n}`).join(" و ");
+                  aiResponse += `\n\n📌 رقم الطلبية فـ النظام: ${orderNumsStr} ✅`;
 
-                  // Link order to session
+                  // Link primary order to session
                   if (sessionId) {
                     await supabase
                       .from("chat_sessions")
-                      .update({ order_id: orderResult.orderId, updated_at: new Date().toISOString() })
+                      .update({ order_id: orderResult.primaryOrderId, updated_at: new Date().toISOString() })
                       .eq("id", sessionId);
                   }
                 }
-              } catch (parseErr) {
-                console.error("Error parsing CREATE_ORDER JSON:", parseErr);
               }
             }
 
@@ -772,18 +976,19 @@ ${userPromptText}
               }
             }
 
-            // B. Check if user asked for a specific shoe size (e.g. 39, 40, 41, 42, 43, 44, 45)
+            // B. Check if user asked for specific shoe size(s) (e.g. 39, 40, 41, 42, 43, 44, 45)
             const combinedUserQuery = `${msg_body} ${aiResponse}`;
             const sizeMatches = combinedUserQuery.match(/\b(3[8-9]|4[0-6])\b/g);
             if (sizeMatches && sizeMatches.length > 0) {
-              const reqSize = sizeMatches[0];
-              for (const p of products) {
-                const stock = p.stock_by_size || {};
-                const stockQty = String(stock[reqSize] ?? "").trim();
-                const hasStock = stockQty !== "" && stockQty !== "0" && stockQty !== "-";
-                const hasInSizes = Array.isArray(p.sizes) && p.sizes.includes(reqSize);
-                if ((hasStock || hasInSizes) && !relevantProducts.some((rp) => rp.id === p.id)) {
-                  relevantProducts.push(p);
+              for (const reqSize of sizeMatches) {
+                for (const p of products) {
+                  const stock = p.stock_by_size || {};
+                  const stockQty = String(stock[reqSize] ?? "").trim();
+                  const hasStock = stockQty !== "" && stockQty !== "0" && stockQty !== "-";
+                  const hasInSizes = Array.isArray(p.sizes) && p.sizes.includes(reqSize);
+                  if ((hasStock || hasInSizes) && !relevantProducts.some((rp) => rp.id === p.id)) {
+                    relevantProducts.push(p);
+                  }
                 }
               }
             }
