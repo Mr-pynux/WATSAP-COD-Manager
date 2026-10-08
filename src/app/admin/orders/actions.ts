@@ -57,40 +57,75 @@ export async function getOrdersServer(
   const { data, count, error } = await query;
   if (error) throw new Error(error.message);
 
-  const orders = (data || []).map(row => ({
-    id: row.id,
-    orderNumber: row.order_number,
-    customerName: row.customer_name,
-    phone: row.phone,
-    city: row.city,
-    district: row.district,
-    landmark: row.landmark,
-    productId: row.product_id,
-    product: {
-      id: row.product?.id || row.product_id,
+  const orderIds = (data || []).map((r: any) => r.id);
+  const itemsByOrderId: Record<string, any[]> = {};
+
+  if (orderIds.length > 0) {
+    const { data: events } = await supabase
+      .from("order_events")
+      .select("order_id, detail")
+      .in("order_id", orderIds)
+      .eq("type", "created");
+
+    for (const ev of events || []) {
+      if (ev.detail && Array.isArray((ev.detail as any).items) && (ev.detail as any).items.length > 0) {
+        itemsByOrderId[ev.order_id] = (ev.detail as any).items;
+      }
+    }
+  }
+
+  const orders = (data || []).map((row: any) => {
+    const primaryItem = {
+      productId: row.product?.id || row.product_id,
       name: row.product?.name || 'منتج محذوف',
-      costMad: row.product?.cost_mad || 0,
-    },
-    size: row.size,
-    color: row.color,
-    quantity: row.quantity,
-    unitPriceMad: row.unit_price_mad,
-    discountMad: 0, // not in DB schema currently
-    totalMad: (row.unit_price_mad * row.quantity), // simplified
-    status: row.status,
-    attempts: row.attempts,
-    lastAttemptAt: row.last_attempt_at,
-    shipDate: row.ship_date,
-    courierId: row.courier_id,
-    courier: row.courier ? { id: row.courier.id, name: row.courier.name } : null,
-    tracking: row.tracking,
-    notes: row.notes,
-    returnReason: row.return_reason,
-    createdAt: row.created_at,
-    confirmedAt: row.confirmed_at,
-    shippedAt: row.shipped_at,
-    deliveredAt: row.delivered_at,
-  })) as OrderDTO[];
+      size: row.size,
+      color: row.color,
+      quantity: row.quantity,
+      priceMad: row.unit_price_mad,
+      imageUrl: row.product?.image_urls?.[0] || null,
+    };
+    const eventItems = itemsByOrderId[row.id];
+    const items = Array.isArray(row.items) && row.items.length > 0 
+      ? row.items 
+      : (eventItems && eventItems.length > 0 ? eventItems : [primaryItem]);
+
+    return {
+      id: row.id,
+      orderNumber: row.order_number,
+      customerName: row.customer_name,
+      phone: row.phone,
+      city: row.city,
+      district: row.district,
+      landmark: row.landmark,
+      productId: row.product_id,
+      product: {
+        id: row.product?.id || row.product_id,
+        name: row.product?.name || 'منتج محذوف',
+        costMad: row.product?.cost_mad || 0,
+        imageUrls: row.product?.image_urls || [],
+      },
+      items,
+      size: row.size,
+      color: row.color,
+      quantity: row.quantity,
+      unitPriceMad: row.unit_price_mad,
+      discountMad: 0,
+      totalMad: (row.unit_price_mad * row.quantity),
+      status: row.status,
+      attempts: row.attempts,
+      lastAttemptAt: row.last_attempt_at,
+      shipDate: row.ship_date,
+      courierId: row.courier_id,
+      courier: row.courier ? { id: row.courier.id, name: row.courier.name } : null,
+      tracking: row.tracking,
+      notes: row.notes,
+      returnReason: row.return_reason,
+      createdAt: row.created_at,
+      confirmedAt: row.confirmed_at,
+      shippedAt: row.shipped_at,
+      deliveredAt: row.delivered_at,
+    };
+  }) as OrderDTO[];
 
   return {
     orders,

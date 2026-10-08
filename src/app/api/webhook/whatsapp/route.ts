@@ -542,13 +542,19 @@ async function createOrderFromWhatsApp({
     if (!resolvedName) resolvedName = "زبون واتساب";
     if (!resolvedCity) resolvedCity = "المغرب";
 
-    const createdOrderNumbers: number[] = [];
-    const createdOrderIds: string[] = [];
+    // Build normalized order items list with full details (name, photo, size, color)
+    const orderItems: Array<{
+      productId: string;
+      name: string;
+      size: string;
+      color: string | null;
+      quantity: number;
+      priceMad: number;
+      imageUrl: string | null;
+    }> = [];
 
     for (let i = 0; i < itemList.length; i++) {
       const it = itemList[i];
-
-      // Find matched product (checks both productId and product_id)
       const targetPid = it.productId || (it as any).product_id;
       let matchedProduct = allProducts.find((p) => p.id === targetPid);
       if (!matchedProduct && targetPid) {
@@ -561,69 +567,103 @@ async function createOrderFromWhatsApp({
         );
       }
       if (!matchedProduct) {
-        matchedProduct = allProducts[0];
+        matchedProduct = allProducts[i] || allProducts[0];
       }
 
-      // Clean size: extract numeric value like "40" from "40" or "مقاس 40"
       const sizeMatch = String(it.size || "").match(/\b(3[8-9]|4[0-6])\b/);
       const cleanSize = sizeMatch ? sizeMatch[0] : (it.size || "42").trim();
-      const itemQty = it.quantity || 1;
 
-      const bundleTag = isBundle
-        ? `[عرض 2 بـ 240 درهم: حذاء ${i + 1}/${itemList.length} - ${matchedProduct.name} مقاس ${cleanSize}]`
-        : `[${matchedProduct.name} مقاس ${cleanSize}]`;
+      orderItems.push({
+        productId: matchedProduct.id,
+        name: matchedProduct.name,
+        size: cleanSize,
+        color: it.color || null,
+        quantity: it.quantity || 1,
+        priceMad: unitPrice,
+        imageUrl: (matchedProduct as any).image_urls?.[0] || null,
+      });
+    }
 
-      const { data: order, error } = await supabase
+    const primaryProduct = allProducts.find((p) => p.id === orderItems[0]?.productId) || allProducts[0];
+    const totalOrderQty = orderItems.reduce((acc, item) => acc + (item.quantity || 1), 0);
+    const combinedSizes = orderItems.map((item) => item.size).join(" / ");
+    const combinedColors = orderItems.map((item) => item.color).filter(Boolean).join(" / ");
+
+    const bundleSummary = isBundle
+      ? `[عرض ${totalOrderQty} أحذية: ${orderItems.map((item) => `${item.name} مقاس ${item.size}${item.color ? ' (' + item.color + ')' : ''}`).join(" + ")}]`
+      : `[${primaryProduct.name} مقاس ${orderItems[0]?.size || "42"}]`;
+
+    const notesContent = resolvedAddress
+      ? `العنوان: ${resolvedAddress} - ${bundleSummary}`
+      : `تم الطلب والتأكيد عبر واتساب بوت - ${bundleSummary}`;
+
+    const insertPayload: any = {
+      customer_name: resolvedName,
+      phone: cleanPhone,
+      city: resolvedCity,
+      district: resolvedAddress || null,
+      product_id: primaryProduct.id,
+      size: combinedSizes,
+      color: combinedColors || null,
+      quantity: totalOrderQty,
+      unit_price_mad: unitPrice,
+      payment_method: "cod",
+      status: "confirmed_continuous",
+      confirmed_at: new Date().toISOString(),
+      notes: notesContent,
+      items: orderItems,
+    };
+
+    let createdOrder: { id: string; order_number: number } | null = null;
+    const { data: oWithItems, error: errWithItems } = await supabase
+      .from("orders")
+      .insert(insertPayload)
+      .select("id, order_number")
+      .single();
+
+    if (!errWithItems && oWithItems) {
+      createdOrder = oWithItems;
+    } else {
+      // If items column doesn't exist yet, insert without items column
+      delete insertPayload.items;
+      const { data: oFallback, error: errFallback } = await supabase
         .from("orders")
-        .insert({
-          customer_name: resolvedName,
-          phone: cleanPhone,
-          city: resolvedCity,
-          district: resolvedAddress || null,
-          product_id: matchedProduct.id,
-          size: cleanSize,
-          color: it.color || null,
-          quantity: itemQty,
-          unit_price_mad: unitPrice,
-          payment_method: "cod",
-          status: "confirmed_continuous",
-          confirmed_at: new Date().toISOString(),
-          notes: resolvedAddress
-            ? `العنوان: ${resolvedAddress} - ${bundleTag}`
-            : `تم الطلب والتأكيد عبر واتساب بوت - ${bundleTag}`,
-        })
+        .insert(insertPayload)
         .select("id, order_number")
         .single();
 
-      if (error || !order) {
-        console.error("Error creating order from WhatsApp item:", error);
+      if (errFallback || !oFallback) {
+        console.error("Error creating single order from WhatsApp:", errFallback);
         notifyAdminError({
           context: "إنشاء طلبية في قاعدة البيانات (Supabase Order Insert Error)",
-          error: error || "No order returned",
+          error: errFallback || "No order returned",
           customerPhone: cleanPhone,
         }).catch(() => {});
-        continue;
+        return null;
       }
-
-      // Insert order event
-      await supabase.from("order_events").insert({
-        order_id: order.id,
-        type: "created",
-        detail: { source: "whatsapp_bot", channel: "meta_cloud_api", item_index: i + 1, total_items: itemList.length },
-      });
-
-      createdOrderNumbers.push(order.order_number);
-      createdOrderIds.push(order.id);
-      console.log(`[Order Created] Order #${order.order_number} (${matchedProduct.name} size ${cleanSize}) registered from WhatsApp for ${resolvedName} (${cleanPhone})!`);
+      createdOrder = oFallback;
     }
 
-    if (createdOrderNumbers.length === 0) return null;
+    // Insert single order event
+    await supabase.from("order_events").insert({
+      order_id: createdOrder.id,
+      type: "created",
+      detail: {
+        source: "whatsapp_bot",
+        channel: "meta_cloud_api",
+        is_bundle: isBundle,
+        total_items: orderItems.length,
+        items: orderItems,
+      },
+    });
+
+    console.log(`[Order Created] Order #${createdOrder.order_number} (${bundleSummary}) registered from WhatsApp for ${resolvedName} (${cleanPhone})!`);
 
     return {
-      orderNumber: createdOrderNumbers[0],
-      orderId: createdOrderIds[0],
-      orderNumbers: createdOrderNumbers,
-      orderIds: createdOrderIds,
+      orderNumber: createdOrder.order_number,
+      orderId: createdOrder.id,
+      orderNumbers: [createdOrder.order_number],
+      orderIds: [createdOrder.id],
     };
   } catch (err) {
     console.error("Exception creating order:", err);

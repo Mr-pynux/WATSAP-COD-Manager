@@ -511,12 +511,56 @@ export default function AdminOrdersPage() {
                           </TableCell>
                           <TableCell>{o.city}</TableCell>
                           <TableCell>
-                            <p className="text-sm font-medium">{o.product.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              مقاس <span className="ltr-num">{o.size}</span>
-                              {o.color ? ` / ${o.color}` : ""} / ×
-                              <span className="ltr-num">{o.quantity}</span>
-                            </p>
+                            {o.items && o.items.length > 1 ? (
+                              <div className="space-y-1">
+                                <Badge variant="secondary" className="bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-600/30 text-[11px] font-bold">
+                                  🎁 عرض {o.items.length} أحذية ({Math.round(o.totalMad)} د.م)
+                                </Badge>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex -space-x-2 rtl:space-x-reverse overflow-hidden">
+                                    {o.items.map((it, idx) => (
+                                      <div key={idx} className="relative h-8 w-8 rounded-md overflow-hidden border-2 border-background shadow-xs shrink-0 bg-muted">
+                                        {it.imageUrl ? (
+                                          <img src={it.imageUrl} alt={it.name} className="h-full w-full object-cover" />
+                                        ) : (
+                                          <Package className="h-4 w-4 m-auto text-muted-foreground" />
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground leading-tight">
+                                    {o.items.map((it, idx) => (
+                                      <span key={idx}>
+                                        {it.name} (<span className="ltr-num font-semibold">{it.size}</span>)
+                                        {idx < o.items!.length - 1 ? " + " : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-9 w-9 rounded-md overflow-hidden border shrink-0 bg-muted flex items-center justify-center">
+                                  {o.items?.[0]?.imageUrl || o.product.imageUrls?.[0] ? (
+                                    <img
+                                      src={o.items?.[0]?.imageUrl || o.product.imageUrls?.[0]}
+                                      alt={o.product.name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <Package className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium">{o.product.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    مقاس <span className="ltr-num">{o.size}</span>
+                                    {o.color ? ` / ${o.color}` : ""} / ×
+                                    <span className="ltr-num">{o.quantity}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="font-bold ltr-num whitespace-nowrap">
                             {Math.round(o.totalMad)} د.م
@@ -608,11 +652,52 @@ export default function AdminOrdersPage() {
                       </span>
                     </div>
 
-                    <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                      <Package className="h-3.5 w-3.5 shrink-0" />
-                      {o.product.name} — مقاس <span className="ltr-num">{o.size}</span>
-                      {o.color ? ` / ${o.color}` : ""}
-                    </p>
+                    {o.items && o.items.length > 1 ? (
+                      <div className="bg-muted/60 p-2.5 rounded-lg space-y-1.5 border border-muted">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-600/30 text-xs font-bold">
+                            🎁 عرض {o.items.length} أحذية
+                          </Badge>
+                          <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{Math.round(o.totalMad)} د.م</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          {o.items.map((it, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs">
+                              <div className="h-8 w-8 rounded-md overflow-hidden border bg-background shrink-0 flex items-center justify-center">
+                                {it.imageUrl ? (
+                                  <img src={it.imageUrl} alt={it.name} className="h-full w-full object-cover" />
+                                ) : (
+                                  <Package className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                              <span className="font-medium flex-1 truncate">{it.name}</span>
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">
+                                مقاس <span className="ltr-num ms-1 font-bold">{it.size}</span>
+                              </Badge>
+                              {it.color && <span className="text-muted-foreground">({it.color})</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                        <div className="h-8 w-8 rounded-md overflow-hidden border bg-muted shrink-0 flex items-center justify-center">
+                          {o.items?.[0]?.imageUrl || o.product.imageUrls?.[0] ? (
+                            <img
+                              src={o.items?.[0]?.imageUrl || o.product.imageUrls?.[0]}
+                              alt={o.product.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span>
+                          {o.product.name} — مقاس <span className="ltr-num">{o.size}</span>
+                          {o.color ? ` / ${o.color}` : ""}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-2 pt-1">
                       <Select value={o.status} onValueChange={(v) => changeStatus(o, v)}>
@@ -765,16 +850,61 @@ function EditOrderSheet({
             </SheetHeader>
 
             <div className="space-y-4 px-4 pb-8">
-              <div className="grid grid-cols-2 gap-2 text-sm bg-muted rounded-xl p-3">
-                <div className="col-span-2">
-                  {order.product.name} — مقاس{" "}
-                  <span className="ltr-num">{order.size}</span>
-                  {order.color ? ` / ${order.color}` : ""} ×
-                  <span className="ltr-num">{order.quantity}</span>
+              {/* Product items gallery with photos */}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  المنتجات المطلوبة ({order.items?.length || 1})
+                </Label>
+                <div className="space-y-2">
+                  {(order.items && order.items.length > 0 ? order.items : [
+                    {
+                      productId: order.productId,
+                      name: order.product.name,
+                      size: order.size,
+                      color: order.color,
+                      quantity: order.quantity,
+                      priceMad: order.unitPriceMad,
+                      imageUrl: order.product.imageUrls?.[0] || null,
+                    }
+                  ]).map((it, idx) => (
+                    <div key={idx} className="flex items-center gap-3 bg-muted/70 p-3 rounded-xl border border-muted">
+                      <div className="h-16 w-16 rounded-lg overflow-hidden border bg-background shrink-0 shadow-xs flex items-center justify-center">
+                        {it.imageUrl ? (
+                          <img src={it.imageUrl} alt={it.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Package className="h-6 w-6 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="font-bold text-sm leading-tight truncate">{it.name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="bg-background text-xs font-semibold px-2 py-0.5">
+                            المقاس: <span className="ltr-num ms-1 font-bold text-primary">{it.size}</span>
+                          </Badge>
+                          {it.color && (
+                            <Badge variant="outline" className="bg-background text-xs px-2 py-0.5">
+                              اللون: <span className="ms-1">{it.color}</span>
+                            </Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground ltr-num">
+                            ×{it.quantity}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-end font-bold text-sm ltr-num text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        {Math.round((it.priceMad || order.unitPriceMad) * (it.quantity || 1))} د.م
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-sm bg-muted rounded-xl p-3 border">
                 <div>
-                  المبلغ:{" "}
-                  <b className="ltr-num">{Math.round(order.totalMad)} د.م</b>
+                  المبلغ الإجمالي:{" "}
+                  <b className="ltr-num text-emerald-600 dark:text-emerald-400 text-base">
+                    {Math.round(order.totalMad)} د.م
+                  </b>
                 </div>
                 <div>
                   المحاولات: <b className="ltr-num">{order.attempts}</b>

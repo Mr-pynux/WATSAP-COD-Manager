@@ -31,6 +31,16 @@ export interface CourierDTO {
   feePerReturnMad: number;
 }
 
+export interface OrderItemDTO {
+  productId: string;
+  name: string;
+  size: string;
+  color?: string | null;
+  quantity: number;
+  priceMad?: number;
+  imageUrl?: string | null;
+}
+
 export interface OrderDTO {
   id: string;
   orderNumber: number;
@@ -44,7 +54,9 @@ export interface OrderDTO {
     id: string;
     name: string;
     costMad: number;
+    imageUrls?: string[];
   };
+  items?: OrderItemDTO[];
   size: string;
   color: string | null;
   quantity: number;
