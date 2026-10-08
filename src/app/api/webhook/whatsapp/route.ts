@@ -952,27 +952,35 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 • إذا سألك عن الأعطال والسيستيم التقني والكود:
   - طمئنه بأن السيستيم والويب هوك والذكاء الاصطناعي شغال 100% وبدون أعطال.
   - إذا سألك عن الكود أو الإضافات: اشرح له بلغة واضحة ما تم تطويره (دمج طلبيات العروض في طلبية واحدة في قاعدة البيانات، نظام تفاصيل الطلب برقم الهاتف والواتساب المباشر، نظام تسجيل الشكايات التلقائي، واجهات الإدارة المتطورة).
-• ⚡ تنفيذ الأوامر والتحكم الكامل في المتجر من الواتساب (REMOTE STORE COMMANDS):
-  سي أيوب يتواصل معك من هاتفه بدون حاسوب، ولديك كامل الصلاحيات لتنفيذ أي تعديل أو إصلاح يطلبه فوراً:
-  1. تغيير حالة أو إلغاء/تأكيد أي طلبية:
+• ⚡ تنفيذ الأوامر والتحكم المطلق في المتجر من الواتساب (REMOTE STORE ROOT COMMANDS):
+  سي أيوب يتواصل معك من هاتفه بدون حاسوب، ولديك الصلاحيات التنفيذية الكاملة (Root / Service Role) على قاعدة البيانات لتنفيذ أي تعديل، حذف، أو مسح يطلبه فوراً:
+  1. 🗑️ مسح وحذف الطلبيات نهائياً من قاعدة البيانات (HARD DELETE):
+     - إذا طلب منك مسح أو حذف طلبية، مثل: "محي الطلبية 21"، "مسح الطلبيات ديال عماد ويوسف"، "حيد الطلبيات التجريبية"، "مسح الكوموندات":
+       [DELETE_ORDER: {"order_number": رقم_الطلبية}]
+       أو لعدة طلبيات:
+       [DELETE_ORDERS: {"order_numbers": [21, 25]}]
+       أو لمسح جميع الطلبيات التجريبية وتصفير المتجر:
+       [DELETE_ALL_TEST_ORDERS: {}]
+     - 🛑 ممنوع منعاً كلياً وباتاً أن تقول لسي أيوب "سير محيهم لراسك من السيت / البيسي" أو "ما عنديش صلاحية"! أنت تملك الصلاحية الكاملة وتنفذ الحذف من قاعدة البيانات فوراً، وتؤكد له الحذف بنجاح: "على الراس والعين سي أيوب، تم مسح الطلبيات نهائياً من قاعدة البيانات وما بقاوش كيبانو فـ السيت بمرة ✅".
+  2. تغيير حالة أو إلغاء/تأكيد أي طلبية:
      [UPDATE_ORDER_STATUS: {"order_number": رقم_الطلبية, "status": "الحالة_الجديدة", "note": "تعديل عبر واتساب بواسطة سي أيوب"}]
      الحالات: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned)
-  2. تعديل معلومات طلبية (مدينة، اسم، هاتف، ملاحظة):
+  3. تعديل معلومات طلبية (مدينة، اسم، هاتف، ملاحظة):
      [UPDATE_ORDER: {"order_number": رقم_الطلبية, "city": "المدينة", "notes": "ملاحظة"}]
-  3. تعديل السطوك والمخزون لأي نمرة وموديل:
+  4. تعديل السطوك والمخزون لأي نمرة وموديل:
      [UPDATE_STOCK: {"product_name": "اسم_الموديل", "size": "النمرة", "quantity": العدد}]
-  4. حل أو إغلاق شكاية:
+  5. حل أو إغلاق شكاية:
      [UPDATE_RECLAMATION: {"id": "معرف_الشكاية", "status": "resolved"}]
-  5. حظر رقم مسيء (Blacklist):
+  6. حظر رقم مسيء (Blacklist):
      [BLACKLIST_PHONE: {"phone": "رقم_الهاتف", "reason": "السبب"}]
-  6. تصفير أو إعادة ضبط محادثة زبون:
+  7. تصفير أو إعادة ضبط محادثة زبون:
      [RESET_CHAT: {"phone": "رقم_الهاتف"}]
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let aiResponse = "";
-    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+    const adminModelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
     for (const mName of adminModelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
@@ -989,6 +997,59 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
     }
 
     console.log(`[Admin Assistant] Reply for Si Ayoub:\n${aiResponse}`);
+
+    // Parse and execute DELETE_ORDER tags (Hard delete order permanently from database)
+    const deleteOrderTags = extractJsonObjectsFromTag(aiResponse, "DELETE_ORDER");
+    for (const tag of deleteOrderTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const orderNum = parsed.order_number;
+        const phone = parsed.phone;
+        const name = parsed.customer_name || parsed.name;
+
+        if (orderNum) {
+          await supabase.from("orders").delete().eq("order_number", orderNum);
+          console.log(`[Admin Action] Hard deleted order #${orderNum}`);
+        } else if (phone) {
+          await supabase.from("orders").delete().or(`phone.eq.${phone},phone.eq.0${phone.replace(/^212/, "")},phone.eq.212${phone.replace(/^0/, "")}`);
+          console.log(`[Admin Action] Hard deleted order for phone ${phone}`);
+        } else if (name) {
+          await supabase.from("orders").delete().ilike("customer_name", `%${name}%`);
+          console.log(`[Admin Action] Hard deleted order for customer ${name}`);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error hard deleting order from admin tag:", err);
+      }
+    }
+
+    // Parse and execute DELETE_ORDERS tags (Multiple order numbers)
+    const deleteMultipleTags = extractJsonObjectsFromTag(aiResponse, "DELETE_ORDERS");
+    for (const tag of deleteMultipleTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const numbers = Array.isArray(parsed.order_numbers) ? parsed.order_numbers : [];
+        if (numbers.length > 0) {
+          await supabase.from("orders").delete().in("order_number", numbers);
+          console.log(`[Admin Action] Hard deleted orders:`, numbers);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error deleting multiple orders:", err);
+      }
+    }
+
+    // Parse and execute DELETE_ALL_TEST_ORDERS tags (Wipes all test/sample orders completely)
+    const deleteAllTags = extractJsonObjectsFromTag(aiResponse, "DELETE_ALL_TEST_ORDERS");
+    for (const tag of deleteAllTags) {
+      try {
+        await supabase.from("orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        console.log(`[Admin Action] Hard deleted all test orders from database`);
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error wiping test orders:", err);
+      }
+    }
 
     // Parse and execute UPDATE_ORDER_STATUS tags
     const statusTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_ORDER_STATUS");
@@ -1148,6 +1209,9 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
     }
 
     const cleanAdminReply = aiResponse
+      .replace(/\[DELETE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[DELETE_ORDERS:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[DELETE_ALL_TEST_ORDERS:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_ORDER_STATUS:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_STOCK:\s*\{[\s\S]*?\}\]/gi, "")
