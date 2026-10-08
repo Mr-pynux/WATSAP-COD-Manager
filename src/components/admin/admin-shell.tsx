@@ -21,7 +21,6 @@ import {
   BarChart3,
   Bot,
   FileSpreadsheet,
-  Mic,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -61,7 +60,6 @@ const NAV = [
   { href: "/admin/couriers", label: "الناقلين", icon: Truck, more: true },
   { href: "/admin/templates", label: "قوالب الرسائل", icon: MessageSquareText, more: true },
   { href: "/admin/bot", label: "إعدادات البوت", icon: Bot, more: true },
-  { href: "/admin/voice-preview", label: "معاينة الصوت (AI)", icon: Mic, more: true },
 ];
 
 const TITLES: Record<string, string> = {
