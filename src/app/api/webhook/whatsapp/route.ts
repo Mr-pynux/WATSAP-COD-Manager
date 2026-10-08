@@ -211,8 +211,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use gemini-3.8-flash first for high-accuracy Moroccan Darija audio transcription, with robust fallbacks
-  const modelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+  // Use gemini-3.5-flash first for high stability and accuracy, with robust fallbacks
+  const modelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
 
   for (const modelName of modelsToTry) {
     try {
@@ -1586,20 +1586,21 @@ ${userPromptText}
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+            const customerModelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
 
             let aiResponse = "";
-            try {
-              const result = await model.generateContent(prompt);
-              aiResponse = result.response.text();
-            } catch (genErr) {
-              console.error("[WhatsApp Bot] Gemini generateContent failed:", genErr);
-              await notifyAdminError({
-                context: "توليد رد البوت عبر Gemini (generateContent Failure)",
-                error: genErr,
-                customerPhone: from,
-                incomingMessage: msg_body,
-              });
+            for (const cmName of customerModelsToTry) {
+              try {
+                const model = genAI.getGenerativeModel({ model: cmName });
+                const result = await model.generateContent(prompt);
+                aiResponse = result.response.text();
+                if (aiResponse) break;
+              } catch (mErr: any) {
+                console.warn(`[WhatsApp Customer Bot] ${cmName} call warning:`, mErr?.message || mErr);
+              }
+            }
+
+            if (!aiResponse) {
               const fallbackMsg = "سمح لي أخويا، كاين واحد الضغط خفيف فالسيستيم دابا، راني معاك وكنقاد ليك الطلبية ديالك على الراس والعين 🙏";
               await sendWhatsAppMessage(from, fallbackMsg);
               return NextResponse.json({ status: "AI_ERROR_HANDLED" }, { status: 200 });
