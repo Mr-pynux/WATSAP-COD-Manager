@@ -67,7 +67,7 @@ export async function getKpisServer(): Promise<KpisResponse> {
   for (const o of (orders30d || [])) {
     if (o.status !== "new") {
       totalForConfirmation++;
-      if (o.status === "confirmed" || o.status === "shipped" || o.status === "delivered") {
+      if (o.status === "confirmed" || o.status === "confirmed_continuous" || o.status === "shipped" || o.status === "delivered") {
         confirmedCount++;
       }
     }

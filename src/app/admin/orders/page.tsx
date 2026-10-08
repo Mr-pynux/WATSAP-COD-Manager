@@ -374,7 +374,7 @@ export default function AdminOrdersPage() {
           className="gap-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
         >
           {sendingDispatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4" />}
-          إرسال إشعار الشحن المسائي (8PM - 10PM)
+          إرسال إشعار الشحن المسائي (8:00 PM)
           {pendingDispatchCount > 0 && (
             <Badge variant="secondary" className="bg-emerald-800 text-white px-2 py-0.5 text-xs font-bold">
               {pendingDispatchCount}

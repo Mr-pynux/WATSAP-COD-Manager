@@ -26,7 +26,7 @@ export async function changeOrderStatus(
   const now = new Date();
   const patch: Record<string, unknown> = { status: newStatus };
 
-  if (newStatus === "confirmed") patch.confirmedAt = current.confirmedAt ?? now;
+  if (newStatus === "confirmed" || newStatus === "confirmed_continuous") patch.confirmedAt = current.confirmedAt ?? now;
   if (newStatus === "shipped") patch.shippedAt = current.shippedAt ?? now;
   if (newStatus === "delivered") patch.deliveredAt = current.deliveredAt ?? now;
   if (extra?.returnReason !== undefined) patch.returnReason = extra.returnReason;

@@ -69,7 +69,7 @@ export function pickTemplateKey(order: OrderLike): string {
   const status = order.status as OrderStatus;
   if (status === "new" && order.attempts === 0) return "confirm_1";
   if (status === "shipped") return "shipped";
-  if (status === "confirmed") {
+  if (status === "confirmed" || status === "confirmed_continuous") {
     if (order.shipDate && isTomorrow(new Date(order.shipDate))) return "day_before";
     return "day_before";
   }

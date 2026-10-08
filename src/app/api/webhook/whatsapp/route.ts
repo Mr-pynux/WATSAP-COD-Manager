@@ -579,6 +579,8 @@ ${userPromptText}
 🛑 قاعدة صارمة لمنع تضييع التوكن والرسائل الزائدة (1-to-1 Single Message Turn):
    - ممنوع منعاً كلياً تجزيء الرد أو إرسال أكثر من رسالة واحدة لكل رسالة من الزبون!
    - كل رسالة من الزبون = رد واحد فقط جامع ومباشر.
+   - لا ترسل أي رسالة من تلقاء نفسك نهائياً، الرد يكون حصراً وقطعاً رداً على الرسالة الواردة من الزبون فقط.
+   - إذا سأل الزبون "علاش مكاتجاوبش؟" أو "واش مكاتجاوبش؟": جاوب بلباقة واختصار: "سمح لي أخويا على التعطيلة، راني معاك دابا على الراس والعين! شنو بغيتي تعرف بخصوص الطلبية ديالك؟" بدون اختلاق تبريرات شخصية.
    - لا تكرر الأسئلة ولا تكرر الكلام الذي سبق ذكره في المحادثة. رد باختصار مفيد وبدون حشو باش ما يضيعش التوكن.
 
 2. خطوات المنهجية الرسمية لتأكيد الطلب والتعامل مع الموديلات والمقاسات:
@@ -635,7 +637,7 @@ ${userPromptText}
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
 
             // Check if AI requested creating an order
-            const orderMatch = aiResponse.match(/\[CREATE_ORDER:\s*(\{.*?\})\]/s);
+            const orderMatch = aiResponse.match(/\[CREATE_ORDER:\s*(\{[\s\S]*?\})\]/);
             if (orderMatch && orderMatch[1]) {
               try {
                 const orderData = JSON.parse(orderMatch[1]);
@@ -651,7 +653,7 @@ ${userPromptText}
                 });
 
                 // Remove the tag from user message and include order number confirmation
-                aiResponse = aiResponse.replace(/\[CREATE_ORDER:\s*\{.*?\}\]/s, "").trim();
+                aiResponse = aiResponse.replace(/\[CREATE_ORDER:\s*\{[\s\S]*?\}\]/, "").trim();
                 if (orderResult) {
                   aiResponse += `\n\n📌 رقم الطلبية ديالك فـ النظام: #${orderResult.orderNumber} ✅`;
 

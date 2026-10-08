@@ -143,7 +143,7 @@ export async function updateOrderStatusServer(id: string, status: string) {
   
   let updates: any = { status };
   
-  if (status === 'confirmed') updates.confirmed_at = new Date().toISOString();
+  if (status === 'confirmed' || status === 'confirmed_continuous') updates.confirmed_at = new Date().toISOString();
   if (status === 'shipped') updates.shipped_at = new Date().toISOString();
   if (status === 'delivered') updates.delivered_at = new Date().toISOString();
   
@@ -162,14 +162,24 @@ export async function updateOrderStatusServer(id: string, status: string) {
 export async function updateOrderDetailsServer(id: string, body: Record<string, any>) {
   const supabase = await verifyAdmin();
   
-  const { error } = await supabase.from("orders").update({
+  const updateData: Record<string, any> = {
     courier_id: body.courierId,
     tracking: body.tracking,
     ship_date: body.shipDate,
     notes: body.notes,
     status: body.status,
     return_reason: body.returnReason,
-  }).eq("id", id);
+  };
+
+  if (body.status === 'confirmed' || body.status === 'confirmed_continuous') {
+    updateData.confirmed_at = new Date().toISOString();
+  } else if (body.status === 'shipped') {
+    updateData.shipped_at = new Date().toISOString();
+  } else if (body.status === 'delivered') {
+    updateData.delivered_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from("orders").update(updateData).eq("id", id);
   
   if (error) throw new Error(error.message);
   
@@ -340,11 +350,11 @@ export async function logWhatsAppAttemptServer(orderId: string, templateKey?: st
 export async function getPendingEveningDispatchCountServer() {
   const supabase = await verifyAdmin();
 
-  // Find all confirmed orders
+  // Find all confirmed and confirmed_continuous orders
   const { data: confirmedOrders, error } = await supabase
     .from("orders")
     .select("id")
-    .eq("status", "confirmed");
+    .in("status", ["confirmed_continuous", "confirmed"]);
 
   if (error || !confirmedOrders) return { count: 0 };
 
@@ -371,11 +381,11 @@ export async function getPendingEveningDispatchCountServer() {
 export async function sendEveningDispatchServer() {
   const supabase = await verifyAdmin();
 
-  // 1. Fetch confirmed orders
+  // 1. Fetch confirmed and confirmed_continuous orders
   const { data: confirmedOrders, error: fetchErr } = await supabase
     .from("orders")
     .select("id, order_number, customer_name, phone, status")
-    .eq("status", "confirmed");
+    .in("status", ["confirmed_continuous", "confirmed"]);
 
   if (fetchErr) throw new Error(fetchErr.message);
   if (!confirmedOrders || confirmedOrders.length === 0) {
@@ -397,7 +407,7 @@ export async function sendEveningDispatchServer() {
     return { success: true, count: 0, message: "جميع الطلبيات المؤكدة تم إرسال إشعار الشحن لها مسبقاً." };
   }
 
-  const dispatchText = "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راها غادا تكون عندك فالقريب العاجل.";
+  const dispatchText = "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راه غادي يتواصل معاك الليفرور فـ أقرب وقت باش يجيبها ليك.";
 
   let sentCount = 0;
   const errors: string[] = [];

@@ -19,11 +19,11 @@ async function handleEveningDispatch(req: NextRequest) {
   );
 
   try {
-    // 1. Fetch confirmed orders
+    // 1. Fetch confirmed and confirmed_continuous orders
     const { data: confirmedOrders, error: fetchErr } = await supabase
       .from("orders")
       .select("id, order_number, customer_name, phone, status")
-      .eq("status", "confirmed");
+      .in("status", ["confirmed_continuous", "confirmed"]);
 
     if (fetchErr) {
       return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -33,7 +33,7 @@ async function handleEveningDispatch(req: NextRequest) {
       return NextResponse.json({
         success: true,
         count: 0,
-        message: "لا توجد أي طلبيات مؤكدة حالياً لإرسال الإشعار.",
+        message: "لا توجد أي طلبيات مؤكدة أو مؤكدة مستمرة حالياً لإرسال الإشعار.",
       });
     }
 
@@ -56,7 +56,7 @@ async function handleEveningDispatch(req: NextRequest) {
       });
     }
 
-    const dispatchText = "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راها غادا تكون عندك فالقريب العاجل.";
+    const dispatchText = "سلام خويا، راه حنا صيفطنا لك الكوموند ديالك إن شاء الله تعالى، راه غادي يتواصل معاك الليفرور فـ أقرب وقت باش يجيبها ليك.";
 
     let sentCount = 0;
     const errors: string[] = [];
