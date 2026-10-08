@@ -400,6 +400,70 @@ interface CreateOrderFromWhatsAppParams {
   items?: CreateOrderItemInput[];
 }
 
+// Robust helper to extract complete JSON objects with nested braces/brackets from a tag like [TAG: {...}]
+function extractJsonObjectsFromTag(text: string, tagName: string): { jsonStr: string; fullTag: string }[] {
+  const results: { jsonStr: string; fullTag: string }[] = [];
+  const tagPrefix = `[${tagName}:`;
+  let searchIndex = 0;
+
+  while (true) {
+    const tagStart = text.indexOf(tagPrefix, searchIndex);
+    if (tagStart === -1) break;
+
+    const firstBrace = text.indexOf("{", tagStart + tagPrefix.length);
+    if (firstBrace === -1) {
+      searchIndex = tagStart + tagPrefix.length;
+      continue;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let endBrace = -1;
+
+    for (let i = firstBrace; i < text.length; i++) {
+      const char = text[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === "\\") {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === "{") depth++;
+        else if (char === "}") {
+          depth--;
+          if (depth === 0) {
+            endBrace = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (endBrace !== -1) {
+      const jsonStr = text.substring(firstBrace, endBrace + 1);
+      const closeBracket = text.indexOf("]", endBrace);
+      const fullTag = text.substring(tagStart, closeBracket !== -1 ? closeBracket + 1 : endBrace + 1);
+
+      results.push({ jsonStr, fullTag });
+      searchIndex = closeBracket !== -1 ? closeBracket + 1 : endBrace + 1;
+    } else {
+      searchIndex = firstBrace + 1;
+    }
+  }
+
+  return results;
+}
+
 // Helper to create order(s) in Supabase directly from WhatsApp (supports single or multi-item bundles)
 async function createOrderFromWhatsApp({
   name,
@@ -484,10 +548,11 @@ async function createOrderFromWhatsApp({
     for (let i = 0; i < itemList.length; i++) {
       const it = itemList[i];
 
-      // Find matched product
-      let matchedProduct = allProducts.find((p) => p.id === it.productId);
-      if (!matchedProduct && it.productId) {
-        const pLower = it.productId.toLowerCase();
+      // Find matched product (checks both productId and product_id)
+      const targetPid = it.productId || (it as any).product_id;
+      let matchedProduct = allProducts.find((p) => p.id === targetPid);
+      if (!matchedProduct && targetPid) {
+        const pLower = String(targetPid).toLowerCase();
         matchedProduct = allProducts.find(
           (p) =>
             p.name.toLowerCase().includes(pLower) ||
@@ -1023,17 +1088,17 @@ ${userPromptText}
             console.log(`[WhatsApp Bot] AI Reply to ${from}:\n${aiResponse}`);
 
             // Check if AI requested logging a customer reclamation
-            const recMatch = aiResponse.match(/\[LOG_RECLAMATION:\s*(\{[\s\S]*?\})\]/);
-            if (recMatch && recMatch[1]) {
+            const recTags = extractJsonObjectsFromTag(aiResponse, "LOG_RECLAMATION");
+            for (const recItem of recTags) {
               try {
-                const recData = JSON.parse(recMatch[1]);
+                const recData = JSON.parse(recItem.jsonStr);
                 await logReclamationFromWhatsApp({
                   name: recData.customer_name || previousCustomerName,
                   phone: recData.phone || from,
                   type: recData.type,
                   issue: recData.issue || "شكاية زبون",
                 });
-                aiResponse = aiResponse.replace(/\[LOG_RECLAMATION:\s*\{[\s\S]*?\}\]/g, "").trim();
+                aiResponse = aiResponse.replace(recItem.fullTag, "").trim();
               } catch (recErr) {
                 console.error("Error parsing LOG_RECLAMATION JSON:", recErr);
               }
@@ -1041,20 +1106,27 @@ ${userPromptText}
 
             // Check if AI requested creating an order
             // Supports both single item and multi-item bundles across one or multiple tags
-            const orderMatches = Array.from(aiResponse.matchAll(/\[CREATE_ORDER:\s*(\{[\s\S]*?\})\]/g));
-            if (orderMatches.length > 0) {
+            const orderTags = extractJsonObjectsFromTag(aiResponse, "CREATE_ORDER");
+            if (orderTags.length > 0) {
               let combinedItems: CreateOrderItemInput[] = [];
               let baseOrderData: any = null;
 
-              for (const match of orderMatches) {
+              for (const tagItem of orderTags) {
                 try {
-                  const parsed = JSON.parse(match[1]);
+                  const parsed = JSON.parse(tagItem.jsonStr);
                   if (!baseOrderData) baseOrderData = parsed;
                   if (parsed.items && Array.isArray(parsed.items)) {
-                    combinedItems.push(...parsed.items);
-                  } else if (parsed.product_id || parsed.size) {
+                    for (const rawIt of parsed.items) {
+                      combinedItems.push({
+                        productId: rawIt.productId || rawIt.product_id,
+                        size: rawIt.size,
+                        color: rawIt.color,
+                        quantity: rawIt.quantity || 1,
+                      });
+                    }
+                  } else if (parsed.product_id || parsed.productId || parsed.size) {
                     combinedItems.push({
-                      productId: parsed.product_id,
+                      productId: parsed.productId || parsed.product_id,
                       size: parsed.size,
                       color: parsed.color,
                       quantity: parsed.quantity || 1,
@@ -1066,7 +1138,7 @@ ${userPromptText}
                     context: "خطأ في قراءة بيانات الطلب (CREATE_ORDER Parse Error)",
                     error: parseErr,
                     customerPhone: from,
-                    incomingMessage: match[1],
+                    incomingMessage: tagItem.jsonStr,
                   }).catch(() => {});
                 }
               }
@@ -1081,11 +1153,15 @@ ${userPromptText}
                   size: baseOrderData.size,
                   color: baseOrderData.color,
                   quantity: baseOrderData.quantity || 1,
-                  productId: baseOrderData.product_id,
+                  productId: baseOrderData.product_id || baseOrderData.productId,
                 });
 
-                // Remove all [CREATE_ORDER: ...] tags
+                // Remove all [CREATE_ORDER: ...] tags cleanly
+                for (const tagItem of orderTags) {
+                  aiResponse = aiResponse.replace(tagItem.fullTag, "");
+                }
                 aiResponse = aiResponse.replace(/\[CREATE_ORDER:\s*\{[\s\S]*?\}\]/g, "").trim();
+
                 if (orderResult && orderResult.orderNumbers.length > 0) {
                   const orderNumsStr = orderResult.orderNumbers.map((n) => `#${n}`).join(" و ");
                   aiResponse += `\n\n📌 رقم الطلبية فـ النظام: ${orderNumsStr} ✅`;
@@ -1094,7 +1170,7 @@ ${userPromptText}
                   if (sessionId) {
                     await supabase
                       .from("chat_sessions")
-                      .update({ order_id: orderResult.primaryOrderId, updated_at: new Date().toISOString() })
+                      .update({ order_id: orderResult.orderId, updated_at: new Date().toISOString() })
                       .eq("id", sessionId);
                   }
                 } else {
