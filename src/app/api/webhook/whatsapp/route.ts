@@ -333,22 +333,50 @@ async function createOrderFromWhatsApp({
       cleanPhone = "0" + cleanPhone.slice(3);
     }
 
+    let resolvedName = (name || "").trim();
+    let resolvedCity = (city || "").trim();
+    let resolvedAddress = (address || "").trim();
+
+    // Auto-resolve previous address, city, and name if customer said "نفس العنوان" or if missing
+    if (!resolvedAddress || resolvedAddress === "نفس العنوان" || !resolvedCity || !resolvedName || resolvedName === "زبون واتساب") {
+      const phone06 = cleanPhone;
+      const phone212 = cleanPhone.startsWith("0") ? "212" + cleanPhone.slice(1) : cleanPhone;
+      const { data: prevOrders } = await supabase
+        .from("orders")
+        .select("customer_name, city, district, landmark")
+        .or(`phone.eq.${phone06},phone.eq.${phone212}`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (prevOrders && prevOrders.length > 0) {
+        const prev = prevOrders[0];
+        if (!resolvedName || resolvedName === "زبون واتساب") resolvedName = prev.customer_name || "زبون واتساب";
+        if (!resolvedCity) resolvedCity = prev.city || "المغرب";
+        if (!resolvedAddress || resolvedAddress === "نفس العنوان") {
+          resolvedAddress = [prev.district, prev.landmark].filter(Boolean).join(" - ").trim() || prev.city;
+        }
+      }
+    }
+
+    if (!resolvedName) resolvedName = "زبون واتساب";
+    if (!resolvedCity) resolvedCity = "المغرب";
+
     const { data: order, error } = await supabase
       .from("orders")
       .insert({
-        customer_name: name || "زبون واتساب",
+        customer_name: resolvedName,
         phone: cleanPhone,
-        city: city || "المغرب",
-        district: address || null,
+        city: resolvedCity,
+        district: resolvedAddress || null,
         product_id: product.id,
         size: size || "42",
         color: color || null,
         quantity: qty,
         unit_price_mad: unitPrice,
         payment_method: "cod",
-        status: "confirmed",
+        status: "confirmed_continuous",
         confirmed_at: new Date().toISOString(),
-        notes: address ? `العنوان: ${address} (تأكيد واتساب بوت)` : "تم الطلب والتأكيد عبر واتساب بوت (AI)",
+        notes: resolvedAddress ? `العنوان: ${resolvedAddress} (تأكيد واتساب بوت)` : "تم الطلب والتأكيد عبر واتساب بوت (AI)",
       })
       .select("id, order_number")
       .single();
@@ -482,14 +510,48 @@ export async function POST(req: NextRequest) {
                 await saveChatMessage(sessionId, "user", userHistoryMsg);
               }
 
-            // 4. Fetch live bot settings and products from Supabase
-            const [botSettingsRes, productsRes] = await Promise.all([
+            // 4. Fetch live bot settings, products, and customer order history from Supabase
+            let cleanPhone = from.replace(/\D/g, "");
+            let phone06 = cleanPhone;
+            let phone212 = cleanPhone;
+            if (cleanPhone.startsWith("212") && cleanPhone.length === 12) {
+              phone06 = "0" + cleanPhone.slice(3);
+            } else if (cleanPhone.startsWith("0") && cleanPhone.length === 10) {
+              phone212 = "212" + cleanPhone.slice(1);
+            }
+
+            const [botSettingsRes, productsRes, previousOrdersRes] = await Promise.all([
               supabase.from("bot_settings").select("*").limit(1).single(),
               supabase.from("products").select("*").eq("active", true),
+              supabase
+                .from("orders")
+                .select("customer_name, city, district, landmark, size, color, created_at")
+                .or(`phone.eq.${phone06},phone.eq.${phone212}`)
+                .order("created_at", { ascending: false })
+                .limit(2),
             ]);
 
             const botSettings = botSettingsRes.data;
             const products = productsRes.data || [];
+            const previousOrders = previousOrdersRes.data || [];
+            const lastOrder = previousOrders.length > 0 ? previousOrders[0] : null;
+
+            const previousCustomerName = lastOrder?.customer_name?.trim();
+            const previousCity = lastOrder?.city?.trim();
+            const previousAddress = [lastOrder?.district, lastOrder?.landmark].filter(Boolean).join(" - ").trim() || previousCity;
+            const previousSize = lastOrder?.size?.trim();
+
+            let customerProfileText = "";
+            if (lastOrder && previousCustomerName && previousCity) {
+              customerProfileText = `🌟 ملف هذا الزبون في النظام (زبون سابق مسجل لديه طلبيات سابقة):
+- الاسم المسجل: ${previousCustomerName}
+- المدينة المسجلة: ${previousCity}
+- العنوان السابق المسجل: ${previousAddress}
+- رقم الهاتف: ${phone06}
+${previousSize ? `- المقاس السابق الذي اشتراه: ${previousSize}` : ""}`;
+            } else {
+              customerProfileText = `🌟 حالة هذا الزبون: زبون جديد (لا توجد طلبيات سابقة مسجلة له برقم الهاتف ${phone06}).`;
+            }
 
             // Format product catalog for AI prompt with live stock and sizes
             const catalogText = products
@@ -555,6 +617,9 @@ export async function POST(req: NextRequest) {
 ${catalogText}
 ---
 
+${customerProfileText}
+---
+
 سجل المحادثة السابقة مع هذا الزبون (رقم هاتفه: ${from}):
 ${historyText}
 ---
@@ -598,25 +663,31 @@ ${userPromptText}
            [SEND_IMAGE: رابط_صورة_الموديل_الثاني]
         4. اذكر له مواصفات الجودة: (سلعة نقية بزاف وممتازة: سوميلة ݣومة رطبة مريحة ومضادة للانزلاق، خياطة صحيحة من الداخل، ومخدومة بلانجيكسيون).
         5. اسأله: "أينا موديل عجبك فيهم أخويا؟ وأينا لون باغي باش نوجدو ليك الطلبية؟"
-        6. إذا كان قد اختار موديلاً محدداً وذكر قياسه، اطلب منه معلومات التوصيل مباشرة:
-           - الإسم الكامل:
-           - المدينة:
-           - العنوان:
-           - رقم الهاتف:
 
-   🔹 المرحلة 3 (ملي يعطيك الكليان هاد المعلومات: الاسم، المدينة، العنوان، الهاتف، ونوع الموديل):
-      - رجع له معلوماته ملخصة باش يتأكد منها:
-        "الله يحفظك أخويا، ها هما المعلومات ديالك باش نتأكدو:
-        • الموديل: {اسم_الموديل_المختار}
-        • الإسم: {name}
-        • المدينة: {city}
-        • العنوان: {address}
-        • رقم الهاتف: {phone}
-        • القياس: {size}
-        • الثمن الإجمالي: {total} درهم (التوصيل فابور والدفع عند الاستلام بعد المعاينة)
-        راه غادي يتواصل معاك المسؤول على التأكيد هاد العشية ما بين 2 و 5 إن شاء الله فـ هاد النمرة باش يأكد معاك."
-      - وأضف تاغ تسجيل الطلب في نهاية الرد مستخدماً المعرف الحقيقي للموديل الذي اختاره:
-        [CREATE_ORDER: {"name": "اسم_الزبون", "city": "المدينة", "address": "العنوان", "size": "المقاس", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار_من_الكتالوج", "phone": "رقم_الهاتف"}]
+   🔹 المرحلة 3 (التعامل الذكي مع العنوان وتأكيد الطلبية):
+      ⚡ إذا كان الزبون مسجلاً مسبقاً ولديه عنوان سابق (كما هو مبين في "ملف هذا الزبون في النظام" أعلاه):
+         1. 🛑 ممنوع منعاً كلياً أن تسأله عن اسمه ومدينته وعنوانه من الصفر بحال يلا غريب مكاتعرفوش!
+         2. استقبله بحرارة كزبون وفيّ باسمه ("مرحبا بك من جديد أخويا ${previousCustomerName || ''}!").
+         3. عندما يختار الموديل والمقاس، اعرض عليه عنوانه السابق مباشرة للتأكيد وسوله واش يفضل يغيرو:
+            "أخويا ${previousCustomerName || ''}، واش نصيفطو ليك الطلبية لـ نفس العنوان السابق ديالك:
+            📍 المدينة: ${previousCity || ''}
+            🏠 العنوان: ${previousAddress || ''}
+            ولا تحب تغيرو لعنوان آخر؟"
+         4. إذا وافق (قال "نعم"، "أه"، "نفس العنوان"، "هو هذاك"، "صيفط لنفس البلاصة"... إلخ):
+            - سجل الطلبية فوراً بالمعلومات السابقة باستخدام تاغ:
+              [CREATE_ORDER: {"name": "${previousCustomerName || ''}", "city": "${previousCity || ''}", "address": "${previousAddress || ''}", "size": "المقاس_المختار", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار", "phone": "${phone06}"}]
+            - وأخبره بتأكيد الطلبية: "صافي على الراس والعين أخويا ${previousCustomerName || ''}، سجلنا ليك الطلبية فـ نفس العنوان! غادي يتواصل معاك الموزع (الليفرور) فـ أقرب وقت باش يجيبها ليك حتى لباب الدار والتوصيل فابور والدفع عند الاستلام بعد المعاينة."
+         5. إذا قال "لا بغيت نبدلو" أو ذكر مدينة وعنواناً جديدين:
+            - سجل الطلبية بالمدينة والعنوان الجديدين اللذين ذكرهما.
+
+      ⚡ إذا كان الزبون جديداً (أول مرة يتواصل معنا):
+         - اطلب منه معلومات التوصيل كالمعتاد:
+           • الإسم الكامل:
+           • المدينة:
+           • العنوان (الحي / الشارع):
+           • رقم الهاتف:
+         - وعندما يزودك بها، لخصها له وأضف تاغ تسجيل الطلب:
+           [CREATE_ORDER: {"name": "اسم_الزبون", "city": "المدينة", "address": "العنوان", "size": "المقاس", "color": "اللون", "quantity": 1, "product_id": "معرف_الموديل_المختار_من_الكتالوج", "phone": "رقم_الهاتف"}]
 
    🔹 المرحلة 4 (توضيح آجال التوصيل وتواصل فريق التأكيد):
       - وضح مدة التوصيل حسب مدينته:
