@@ -488,3 +488,77 @@ export async function sendEveningDispatchServer() {
   };
 }
 
+export async function getOrderByIdServer(id: string): Promise<OrderDTO | null> {
+  const supabase = await verifyAdmin();
+  const { data: row, error } = await supabase
+    .from("orders")
+    .select("*, product:product_id(id, name, cost_mad, image_urls), courier:courier_id(id, name)")
+    .eq("id", id)
+    .single();
+
+  if (error || !row) return null;
+
+  // Fetch created event for items fallback
+  const { data: events } = await supabase
+    .from("order_events")
+    .select("detail")
+    .eq("order_id", id)
+    .eq("type", "created")
+    .limit(1);
+
+  const eventItems = events?.[0]?.detail && Array.isArray((events[0].detail as any).items) 
+    ? (events[0].detail as any).items 
+    : undefined;
+
+  const primaryItem = {
+    productId: row.product?.id || row.product_id,
+    name: row.product?.name || 'منتج',
+    size: row.size,
+    color: row.color,
+    quantity: row.quantity,
+    priceMad: row.unit_price_mad,
+    imageUrl: row.product?.image_urls?.[0] || null,
+  };
+
+  const items = Array.isArray(row.items) && row.items.length > 0
+    ? row.items
+    : (eventItems && eventItems.length > 0 ? eventItems : [primaryItem]);
+
+  return {
+    id: row.id,
+    orderNumber: row.order_number,
+    customerName: row.customer_name,
+    phone: row.phone,
+    city: row.city,
+    district: row.district,
+    landmark: row.landmark,
+    productId: row.product_id,
+    product: {
+      id: row.product?.id || row.product_id,
+      name: row.product?.name || 'منتج',
+      costMad: row.product?.cost_mad || 0,
+      imageUrls: row.product?.image_urls || [],
+    },
+    items,
+    size: row.size,
+    color: row.color,
+    quantity: row.quantity,
+    unitPriceMad: row.unit_price_mad,
+    discountMad: 0,
+    totalMad: (row.unit_price_mad * row.quantity),
+    status: row.status,
+    attempts: row.attempts,
+    lastAttemptAt: row.last_attempt_at,
+    shipDate: row.ship_date,
+    courierId: row.courier_id,
+    courier: row.courier ? { id: row.courier.id, name: row.courier.name } : null,
+    tracking: row.tracking,
+    notes: row.notes,
+    returnReason: row.return_reason,
+    createdAt: row.created_at,
+    confirmedAt: row.confirmed_at,
+    shippedAt: row.shipped_at,
+    deliveredAt: row.delivered_at,
+  } as OrderDTO;
+}
+

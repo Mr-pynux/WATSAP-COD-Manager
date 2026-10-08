@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Download,
+  ExternalLink,
   FilterX,
   Loader2,
   MessageCircle,
@@ -495,13 +496,24 @@ export default function AdminOrdersPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <button
-                              type="button"
-                              onClick={() => setEditing(o)}
-                              className="font-semibold hover:text-primary text-start"
-                            >
-                              {o.customerName}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditing(o)}
+                                className="font-semibold hover:text-primary text-start"
+                              >
+                                {o.customerName}
+                              </button>
+                              <a
+                                href={`/admin/orders/${o.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-muted-foreground hover:text-primary transition-colors p-1 rounded-md hover:bg-muted"
+                                title="فتح الطلب والصور في تبويب جديد (Autre onglet)"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
                             {o.district && (
                               <p className="text-xs text-muted-foreground">{o.district}</p>
                             )}
@@ -626,7 +638,24 @@ export default function AdminOrdersPage() {
                         />
                         <div>
                           <span className="font-bold ltr-num">#{o.orderNumber}</span>
-                          <p className="font-semibold leading-tight">{o.customerName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditing(o)}
+                              className="font-semibold leading-tight text-start hover:text-primary"
+                            >
+                              {o.customerName}
+                            </button>
+                            <a
+                              href={`/admin/orders/${o.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground hover:text-primary p-0.5"
+                              title="فتح في تبويب جديد"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </div>
                           <p className="text-sm text-muted-foreground ltr-num" dir="ltr">
                             {o.phone}
                           </p>
@@ -831,21 +860,50 @@ function EditOrderSheet({
 
   return (
     <Sheet open={!!order} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="start" className="w-full sm:max-w-md overflow-y-auto nice-scroll">
+      <SheetContent side="start" className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto nice-scroll">
         {order && (
           <>
-            <SheetHeader>
-              <SheetTitle>
-                الطلب <span className="ltr-num">#{order.orderNumber}</span> —{" "}
-                {order.customerName}
-              </SheetTitle>
-              <SheetDescription>
-                {order.city}
-                {order.district ? ` / ${order.district}` : ""}
-                {order.landmark ? ` / ${order.landmark}` : ""} ·{" "}
-                <span className="ltr-num" dir="ltr">
-                  {order.phone}
+            <SheetHeader className="pb-2 border-b">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <SheetTitle className="text-lg sm:text-xl">
+                  الطلب <span className="ltr-num">#{order.orderNumber}</span> —{" "}
+                  {order.customerName}
+                </SheetTitle>
+                <a
+                  href={`/admin/orders/${order.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  فتح في صفحة كاملة (تبويب جديد)
+                </a>
+              </div>
+              <SheetDescription className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <span>
+                  {order.city}
+                  {order.district ? ` / ${order.district}` : ""}
+                  {order.landmark ? ` / ${order.landmark}` : ""} ·{" "}
+                  <span className="ltr-num font-bold text-foreground" dir="ltr">
+                    {order.phone}
+                  </span>
                 </span>
+                <div className="flex items-center gap-2">
+                  <a href={`tel:${order.phone}`}>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-semibold">
+                      اتصال 📞
+                    </Button>
+                  </a>
+                  <a
+                    href={`https://wa.me/${order.phone.startsWith("0") ? "212" + order.phone.slice(1) : order.phone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button size="sm" className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                      واتساب 💬
+                    </Button>
+                  </a>
+                </div>
               </SheetDescription>
             </SheetHeader>
 
