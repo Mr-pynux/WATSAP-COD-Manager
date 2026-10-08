@@ -726,6 +726,346 @@ async function logReclamationFromWhatsApp({
   }
 }
 
+// ==========================================
+// 👑 EXECUTIVE ADMIN ASSISTANT HANDLER
+// ==========================================
+async function handleAdminWhatsAppMessage({
+  from,
+  msg_body,
+  isVoiceNote,
+  sessionId,
+  history,
+}: {
+  from: string;
+  msg_body: string;
+  isVoiceNote: boolean;
+  sessionId: string | null;
+  history: Array<{ role: string; content: string }>;
+}): Promise<NextResponse> {
+  try {
+    const apiKey = process.env.AI_API_KEY?.trim() || "";
+    if (!apiKey) {
+      console.error("[Admin Assistant] Missing AI_API_KEY");
+      await sendWhatsAppMessage(from, "عذراً سي أيوب، مفتاح AI_API_KEY غير موجود في الخادم.");
+      return NextResponse.json({ status: "ADMIN_ERROR" }, { status: 200 });
+    }
+
+    // 1. Time & Date in Casablanca
+    const nowCasablanca = new Date().toLocaleString("en-CA", {
+      timeZone: "Africa/Casablanca",
+      hour12: false,
+    });
+    const todayDateStr = nowCasablanca.split(",")[0].trim(); // "YYYY-MM-DD"
+    const todayStartUtc = new Date(`${todayDateStr}T00:00:00+01:00`).toISOString();
+    const timeDisplay = new Date().toLocaleTimeString("ar-MA", {
+      timeZone: "Africa/Casablanca",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // 2. Search for any specific order number or phone mentioned in msg_body
+    let specificOrder: any = null;
+    const orderNumMatches = msg_body.match(/#?(\b\d{1,5}\b)/g);
+    const phoneMatch = msg_body.match(/(0[67]\d{8})/);
+
+    if (orderNumMatches) {
+      for (const match of orderNumMatches) {
+        const cleanNum = parseInt(match.replace("#", ""), 10);
+        if (!isNaN(cleanNum) && cleanNum > 0 && cleanNum < 100000) {
+          const { data: ord } = await supabase
+            .from("orders")
+            .select("*, product:product_id(name)")
+            .eq("order_number", cleanNum)
+            .maybeSingle();
+          if (ord) {
+            specificOrder = ord;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!specificOrder && phoneMatch) {
+      const ph = phoneMatch[1];
+      const { data: ords } = await supabase
+        .from("orders")
+        .select("*, product:product_id(name)")
+        .or(`phone.eq.${ph},phone.eq.212${ph.slice(1)}`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (ords && ords.length > 0) {
+        specificOrder = ords[0];
+      }
+    }
+
+    // 3. Parallel Live Database Queries
+    const [
+      todayOrdersRes,
+      totalOrdersCountRes,
+      recentOrdersRes,
+      reclamationsRes,
+      productsRes,
+    ] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, order_number, status, unit_price_mad, quantity, items, created_at")
+        .gte("created_at", todayStartUtc),
+      supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true }),
+      supabase
+        .from("orders")
+        .select("id, order_number, customer_name, phone, city, district, status, unit_price_mad, quantity, items, size, color, created_at, tracking, notes, product:product_id(name)")
+        .order("created_at", { ascending: false })
+        .limit(15),
+      supabase
+        .from("reclamations")
+        .select("id, customer_name, phone, type, issue, status, created_at, admin_notes")
+        .order("created_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("products")
+        .select("id, name, price_mad, stock_by_size, active, sizes, colors")
+        .eq("active", true),
+    ]);
+
+    const todayOrders = todayOrdersRes.data || [];
+    const totalOrdersCount = totalOrdersCountRes.count || 0;
+    const recentOrders = recentOrdersRes.data || [];
+    const allReclamations = reclamationsRes.data || [];
+    const activeProducts = productsRes.data || [];
+
+    // Calculate metrics
+    const todayStatusMap: Record<string, number> = {};
+    let todayRevenueMad = 0;
+    for (const ord of todayOrders) {
+      todayStatusMap[ord.status] = (todayStatusMap[ord.status] || 0) + 1;
+      if (["new", "confirmed", "confirmed_continuous", "shipped", "delivered"].includes(ord.status)) {
+        if (Array.isArray(ord.items) && ord.items.length > 0) {
+          const itSum = ord.items.reduce(
+            (s: number, it: any) => s + (Number(it.priceMad || it.price_mad || it.price) || 0) * (Number(it.quantity) || 1),
+            0
+          );
+          todayRevenueMad += itSum > 0 ? itSum : (Number(ord.unit_price_mad) || 0) * (Number(ord.quantity) || 1);
+        } else {
+          todayRevenueMad += (Number(ord.unit_price_mad) || 0) * (Number(ord.quantity) || 1);
+        }
+      }
+    }
+
+    const pendingRecs = allReclamations.filter((r) => r.status === "pending" || r.status === "contacted");
+
+    // Format recent orders text
+    const recentOrdersText = recentOrders.length > 0
+      ? recentOrders.map((o) => {
+          const time = new Date(o.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Casablanca" });
+          const date = new Date(o.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", timeZone: "Africa/Casablanca" });
+          let itemsDesc = "";
+          if (Array.isArray(o.items) && o.items.length > 0) {
+            itemsDesc = o.items.map((it: any) => `${it.name || 'سبرديلة'} (نمرة ${it.size}${it.color ? `, لون ${it.color}` : ''})`).join(" + ");
+          } else {
+            itemsDesc = `${o.product?.name || 'سبرديلة'} (نمرة ${o.size}${o.color ? `, لون ${o.color}` : ''})`;
+          }
+          const totalMad = (Number(o.unit_price_mad) || 0) * (Number(o.quantity) || 1);
+          return `• الطلبية #${o.order_number} | الزبون: ${o.customer_name} | الهاتف: ${o.phone} | المدينة: ${o.city} | الحالة: [${o.status}] | الثمن: ${totalMad} درهم | السلعة: ${itemsDesc} | الوقت: ${date} ${time}${o.notes ? ` | ملاحظة: ${o.notes}` : ''}`;
+        }).join("\n")
+      : "لا توجد أي طلبيات مسجلة بعد.";
+
+    // Format reclamations text
+    const recsText = allReclamations.length > 0
+      ? allReclamations.map((r) => {
+          return `• شكاية (${r.type}): الزبون ${r.customer_name} (${r.phone}) | الحالة: [${r.status}] | المشكل: "${r.issue}"`;
+        }).join("\n")
+      : "لا توجد أي شكايات مسجلة في النظام (0 شكايات).";
+
+    // Format products & stock text
+    const productsText = activeProducts.map((p) => {
+      let stockSummary = "";
+      if (p.stock_by_size && typeof p.stock_by_size === "object") {
+        stockSummary = Object.entries(p.stock_by_size)
+          .map(([size, qty]) => `${size}: ${qty}`)
+          .join(", ");
+      } else {
+        stockSummary = "متوفر بجميع المقاسات";
+      }
+      return `• ${p.name} | الثمن: ${p.price_mad} درهم | المخزون حسب النمرة: [${stockSummary}]`;
+    }).join("\n");
+
+    let specificOrderText = "";
+    if (specificOrder) {
+      let itemDetails = "";
+      if (Array.isArray(specificOrder.items) && specificOrder.items.length > 0) {
+        itemDetails = specificOrder.items.map((it: any) => `${it.name || 'حذاء'} مقاس ${it.size}`).join(" و ");
+      } else {
+        itemDetails = `${specificOrder.product?.name || 'حذاء'} مقاس ${specificOrder.size}`;
+      }
+      specificOrderText = `\n🎯 نتيجة البحث المباشر عن الطلبية المستفسر عنها:
+- رقم الطلبية: #${specificOrder.order_number}
+- اسم الزبون: ${specificOrder.customer_name}
+- الهاتف: ${specificOrder.phone}
+- المدينة: ${specificOrder.city} - ${specificOrder.district || ''}
+- الحالة الحالية: ${specificOrder.status}
+- السلعة: ${itemDetails}
+- الثمن الإجمالي: ${(Number(specificOrder.unit_price_mad) || 0) * (Number(specificOrder.quantity) || 1)} درهم
+- تاريخ الطلب: ${specificOrder.created_at}
+- الملاحظات: ${specificOrder.notes || 'لا توجد'}\n`;
+    }
+
+    const historyText = history.length > 0
+      ? history.map((m) => `${m.role === "user" ? "سي أيوب (الأدمين)" : "أنت (المساعد)"}: ${m.content}`).join("\n")
+      : "(هذه بداية المحادثة مع سي أيوب)";
+
+    const adminPrompt = `أنت "المساعد التنفيذي والإداري والتقني الذكي" لمتجر Shoespot، وتتحدث مباشرة وفقط مع صاحب المتجر والمدير العام: "سي أيوب" (الأدمين / الشاف) عبر الواتساب.
+
+🚨 قواعد صارمة ومقدسة في وضع الأدمين (EXECUTIVE ADMIN MODE):
+1. أنت لست في وضع بيع زبائن!
+   - 🛑 ممنوع منعاً كلياً وباتاً أن تعامل سي أيوب كزبون عادي!
+   - 🛑 ممنوع تسأله عن النمرة (المقاس) ديالو، وممنوع تقترح عليه يشري سبرديلة، وممنوع تسأله عن العنوان أو المدينة ديال التوصيل!
+   - 🛑 ممنوع نهائياً استخدام تاغات الزبائن مثل [CREATE_ORDER] أو إرسال صور السلع للبيع أو تاغات الصور.
+
+2. أسلوب التخاطب:
+   - تحدث بالدارجة المغربية الإدارية والعملية والمحترمة (Business Darija).
+   - ناديه بتقدير: "سي أيوب"، "أ شاف"، "خويا أيوب".
+   - كن سريع البديهة، دقيقاً في الأرقام، ملخصاً ومباشراً بدون إطالة فارغة.
+   - إذا أرسل لك تسجيل صوتي (أوديو) أو رسالة مكتوبة، جاوبه بدقة كاملة على كل ما طلبه.
+
+3. معطيات المتجر الحية الآن (LIVE STORE METRICS):
+📅 التاريخ والوقت في المغرب: ${todayDateStr} الساعة ${timeDisplay}
+📦 إجمالي الطلبيات المسجلة في النظام: ${totalOrdersCount} طلبية
+📊 طلبيات اليوم (${todayDateStr}): ${todayOrders.length} طلبية
+💰 مداخيل اليوم التقديرية: ${todayRevenueMad} درهم
+📈 تفصيل حالات طلبيات اليوم: ${JSON.stringify(todayStatusMap)}
+⚠️ الشكايات العالقة المعلقة (Pending): ${pendingRecs.length} شكايات
+
+---
+قائمة آخر الطلبيات في النظام:
+${recentOrdersText}
+---
+وضعية الشكايات والروتور:
+${recsText}
+---
+وضعية المنتجات والمخزون (السطوك):
+${productsText}
+---
+${specificOrderText}
+
+4. سجل المحادثة السابقة مع سي أيوب:
+${historyText}
+
+5. الرسالة الواردة الحالية من سي أيوب:
+${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/أوديو بالدارجة]: "${msg_body}"` : `💬 [رسالة مكتوبة]: "${msg_body}"`}
+
+6. مهامك وصلاحياتك:
+• إذا سألك عن حالة الطلبيات أو المبيعات أو اليوم شنو داز: قدم له ملخصاً تنفيذياً سريعاً ومرتباً بالإيموجي.
+• إذا سألك عن طلبية معينة (برقمها أو باسم الزبون أو هاتفه): أعطه كل تفاصيلها فوراً.
+• إذا سألك عن الشكايات (الريكلاماسيون) أو مشاكل التوصيل: لخص له الشكايات العالقة وأرقام الكليان.
+• إذا سألك عن السطوك: اذكر له السلعة المتوفرة أو الناقصة.
+• إذا سألك عن الأعطال والسيستيم التقني والكود:
+  - طمئنه بأن السيستيم والويب هوك والذكاء الاصطناعي شغال 100% وبدون أعطال.
+  - إذا سألك عن الكود أو الإضافات: اشرح له بلغة واضحة ما تم تطويره (دمج طلبيات العروض في طلبية واحدة في قاعدة البيانات، نظام تفاصيل الطلب برقم الهاتف والواتساب المباشر، نظام تسجيل الشكايات التلقائي، واجهات الإدارة المتطورة).
+• ⚡ تنفيذ الأوامر الإدارية (ADMIN COMMANDS):
+  - إذا أمرك بتعديل حالة طلبية، مثل: "بدل الطلبية 21 لـ confirmed"، "لغي الطلب 25"، "دير للطلب 21 shipped":
+    أكد له التنفيذ في ردك، وأضف التاغ التالي حصراً في نهاية الرسالة:
+    [UPDATE_ORDER_STATUS: {"order_number": رقم_الطلبية, "status": "الحالة_الجديدة", "note": "تعديل عبر واتساب بواسطة سي أيوب"}]
+    الحالات المسموحة: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned)
+  - إذا أمرك بحل شكاية:
+    [UPDATE_RECLAMATION: {"id": "معرف_الشكاية", "status": "resolved"}]
+
+أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+
+    const result = await model.generateContent(adminPrompt);
+    let aiResponse = result.response.text();
+
+    console.log(`[Admin Assistant] Reply for Si Ayoub:\n${aiResponse}`);
+
+    // Parse and execute UPDATE_ORDER_STATUS tags
+    const statusTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_ORDER_STATUS");
+    for (const tag of statusTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const orderNum = parsed.order_number;
+        const newStatus = parsed.status;
+        if (orderNum && newStatus) {
+          const { data: ord } = await supabase
+            .from("orders")
+            .select("id, status")
+            .eq("order_number", orderNum)
+            .maybeSingle();
+
+          if (ord) {
+            const updates: any = { status: newStatus };
+            if (newStatus === "confirmed" || newStatus === "confirmed_continuous") updates.confirmed_at = new Date().toISOString();
+            if (newStatus === "shipped") updates.shipped_at = new Date().toISOString();
+            if (newStatus === "delivered") updates.delivered_at = new Date().toISOString();
+            if (parsed.note) updates.notes = parsed.note;
+
+            await supabase.from("orders").update(updates).eq("id", ord.id);
+            await supabase.from("order_events").insert({
+              order_id: ord.id,
+              type: "status_change",
+              detail: {
+                old_status: ord.status,
+                new_status: newStatus,
+                source: "admin_whatsapp",
+                by: "Ayoub",
+                note: parsed.note || "Updated via WhatsApp by Admin",
+              },
+            });
+            console.log(`[Admin Action] Order #${orderNum} status updated to ${newStatus}`);
+          }
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error updating order status from admin tag:", err);
+      }
+    }
+
+    // Parse and execute UPDATE_RECLAMATION tags
+    const recTags = extractJsonObjectsFromTag(aiResponse, "UPDATE_RECLAMATION");
+    for (const tag of recTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        if (parsed.id) {
+          await supabase.from("reclamations").update({
+            status: parsed.status || "resolved",
+            admin_notes: parsed.note || "Resolved by Admin via WhatsApp",
+            updated_at: new Date().toISOString(),
+          }).eq("id", parsed.id);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error updating reclamation from admin tag:", err);
+      }
+    }
+
+    const cleanAdminReply = aiResponse
+      .replace(/\[UPDATE_ORDER_STATUS:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[UPDATE_RECLAMATION:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[SEND_IMAGE:\s*https?:\/\/[^\s\]]+\]/gi, "")
+      .trim();
+
+    // Save assistant response to session history
+    if (sessionId) {
+      await saveChatMessage(sessionId, "assistant", cleanAdminReply);
+    }
+
+    // Send WhatsApp text message to Admin
+    await sendWhatsAppMessage(from, cleanAdminReply);
+
+    return NextResponse.json({ status: "ADMIN_REPLY_SENT" }, { status: 200 });
+  } catch (err) {
+    console.error("[Admin Assistant Error]", err);
+    await sendWhatsAppMessage(
+      from,
+      `سمح لي سي أيوب، وقع واحد الخطأ تقني فالاستجابة: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return NextResponse.json({ status: "ADMIN_ERROR_HANDLED" }, { status: 200 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -877,6 +1217,26 @@ export async function POST(req: NextRequest) {
               phone06 = "0" + cleanPhone.slice(3);
             } else if (cleanPhone.startsWith("0") && cleanPhone.length === 10) {
               phone212 = "212" + cleanPhone.slice(1);
+            }
+
+            // 👑 ADMIN RECOGNITION: Si Ayoub (0610026260 / 212610026260)
+            const adminClean = ADMIN_PHONE.replace(/\D/g, "");
+            const isAdmin =
+              cleanPhone === "212610026260" ||
+              phone06 === "0610026260" ||
+              cleanPhone === adminClean ||
+              (adminClean.startsWith("212") && phone06 === "0" + adminClean.slice(3)) ||
+              (adminClean.startsWith("0") && phone212 === "212" + adminClean.slice(1));
+
+            if (isAdmin) {
+              console.log(`[WhatsApp Bot] 👑 ADMIN RECOGNIZED (${from}) -> Activating Executive Admin Assistant Mode`);
+              return await handleAdminWhatsAppMessage({
+                from,
+                msg_body,
+                isVoiceNote,
+                sessionId,
+                history,
+              });
             }
 
             const [botSettingsRes, productsRes, previousOrdersRes] = await Promise.all([
