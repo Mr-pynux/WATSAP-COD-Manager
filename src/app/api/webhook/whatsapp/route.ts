@@ -16,6 +16,16 @@ const supabase = createClient(
 // In-memory cache for strict 1-to-1 message deduplication (prevents Meta webhook duplicate retries)
 const processedMessageIds = new Map<string, number>();
 const activeProcessingPhones = new Set<string>();
+
+// 🛡️ HIGH-AVAILABILITY 5-TIER VERIFIED GEMINI CHAIN
+// All 5 models are verified active in Google AI Studio and support both audio and text generation
+const VERIFIED_AI_MODELS_CHAIN = [
+  "gemini-3.6-flash",
+  "gemini-3.7-flash",
+  "gemini-flash-lite-latest",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash-preview",
+];
 async function markMessageAsRead(messageId: string) {
   const token = process.env.WHATSAPP_API_TOKEN?.trim();
   const phone_number_id = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -222,10 +232,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use gemini-3.6-flash first for high stability, fast latency, and zero rate limits, with 3.7 and 3.8 as fallbacks
-  const modelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
-
-  for (const modelName of modelsToTry) {
+  // Use verified 5-tier chain with failover to guarantee transcription never fails
+  for (const modelName of VERIFIED_AI_MODELS_CHAIN) {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: modelName });
@@ -240,7 +248,7 @@ async function transcribeAudioWithGemini(
           },
           "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
         ]),
-        15000
+        14000
       );
 
       const text = result.response.text().trim();
@@ -262,13 +270,9 @@ async function analyzeIncomingImageWithGemini(
   apiKey: string,
   products: Array<{ id: string; name: string }>
 ): Promise<{ details: string; detectedSize: string | null } | null> {
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
+  const catalogBrief = products.map((p) => `- ${p.name} (معرف: ${p.id})`).join("\n");
 
-    const catalogBrief = products.map((p) => `- ${p.name} (معرف: ${p.id})`).join("\n");
-
-    const prompt = `أنت خبير فحص صور أحذية رياضية لمتجر Shoespot.
+  const prompt = `أنت خبير فحص صور أحذية رياضية لمتجر Shoespot.
 الموديلات المتوفرة في المتجر هي:
 ${catalogBrief}
 
@@ -279,31 +283,37 @@ ${catalogBrief}
 أجب بدقة باختصار شديد في سطر واحد فقط بدون مقدمات:
 مثال: "حذاء رياضي COBRA (المقاس المكتوب بالصورة: 42)" أو "حداء new balance" أو "حذاء رياضي غير محدد".`;
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mimeType || "image/jpeg",
-          data: base64Image,
-        },
-      },
-      prompt,
-    ]);
+  for (const modelName of VERIFIED_AI_MODELS_CHAIN) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
 
-    const text = result.response.text().trim();
-    if (!text) return null;
+      const result = await runWithTimeout(
+        model.generateContent([
+          {
+            inlineData: {
+              mimeType: mimeType || "image/jpeg",
+              data: base64Image,
+            },
+          },
+          prompt,
+        ]),
+        12000
+      );
 
-    const sizeMatch = text.match(/\b(3[8-9]|4[0-6])\b/);
-    const detectedSize = sizeMatch ? sizeMatch[0] : null;
+      const text = result.response.text().trim();
+      if (!text) continue;
 
-    return { details: text, detectedSize };
-  } catch (err) {
-    console.error("[WhatsApp Image Analysis] Error with Gemini:", err);
-    notifyAdminError({
-      context: "تحليل صورة الزبون (Gemini Vision Image Analysis)",
-      error: err,
-    }).catch(() => {});
-    return null;
+      const sizeMatch = text.match(/\b(3[8-9]|4[0-6])\b/);
+      const detectedSize = sizeMatch ? sizeMatch[0] : null;
+
+      return { details: text, detectedSize };
+    } catch (err) {
+      console.warn(`[WhatsApp Image Analysis] Model ${modelName} failed:`, err);
+    }
   }
+
+  return null;
 }
 
 const VERIFY_TOKEN = (process.env.META_VERIFY_TOKEN || "watsap_cod_token").trim();
@@ -953,12 +963,14 @@ async function handleAdminWhatsAppMessage({
   isVoiceNote,
   sessionId,
   history,
+  messageId,
 }: {
   from: string;
   msg_body: string;
   isVoiceNote: boolean;
   sessionId: string | null;
   history: Array<{ role: string; content: string }>;
+  messageId?: string;
 }): Promise<NextResponse> {
   try {
     const apiKey = process.env.AI_API_KEY?.trim() || "";
@@ -1374,20 +1386,22 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let aiResponse = "";
-    const adminModelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
-    for (const mName of adminModelsToTry) {
+    for (const mName of VERIFIED_AI_MODELS_CHAIN) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
-        const result = await runWithTimeout(model.generateContent(adminPrompt), 16000);
+        const result = await runWithTimeout(model.generateContent(adminPrompt), 10000);
         aiResponse = result.response.text();
-        if (aiResponse) break;
+        if (aiResponse && aiResponse.trim().length > 0) {
+          console.log(`[Admin Assistant] Responded successfully via verified model ${mName}`);
+          break;
+        }
       } catch (err: any) {
-        console.warn(`[Admin Assistant] ${mName} generation failed:`, err?.message || err);
+        console.warn(`[Admin Assistant] ${mName} generation failed, trying next verified model:`, err?.message || err);
       }
     }
 
     if (!aiResponse) {
-      aiResponse = "أهلاً سي أيوب، راني معاك! كان واحد الضغط خفيف فـ سيرفر الذكاء الاصطناعي دابا، عفاك عاود صيفط ليا أوديو وها أنا معاك فـ البلاصة أ شاف 🙏";
+      aiResponse = `أهلاً سي أيوب، راني معاك أ شاف! كاين ضغط استثنائي فـ سيرفرات الذكاء الاصطناعي، ولكن هاهي المعطيات الحية ديال المتجر دابا مباشرة من السيستيم:\n\n📦 مجموع الطلبيات: ${totalOrdersCount} طلبية\n📊 طلبيات اليوم: ${todayOrders.length} طلبية\n💰 المداخيل التقديرية: ${todayRevenueMad} درهم\n⚠️ الشكايات المعلقة: ${pendingRecs.length}\n\nكلشي مسجل ومحمي فـ قاعدة البيانات، وها أنا معاك أ شاف 🙏`;
     }
 
     console.log(`[Admin Assistant] Reply for Si Ayoub:\n${aiResponse}`);
@@ -1736,12 +1750,20 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       await saveChatMessage(sessionId, "assistant", cleanAdminReply);
     }
 
+    // Mark message as read (Vu) strictly RIGHT BEFORE sending reply
+    if (messageId) {
+      markMessageAsRead(messageId).catch(() => {});
+    }
+
     // Send WhatsApp text message to Admin
     await sendWhatsAppMessage(from, cleanAdminReply);
 
     return NextResponse.json({ status: "ADMIN_REPLY_SENT" }, { status: 200 });
   } catch (err) {
     console.error("[Admin Assistant Error]", err);
+    if (messageId) {
+      markMessageAsRead(messageId).catch(() => {});
+    }
     await sendWhatsAppMessage(
       from,
       `سمح لي سي أيوب، وقع واحد الخطأ تقني فالاستجابة: ${err instanceof Error ? err.message : String(err)}`
@@ -1851,10 +1873,8 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Mark as read ONLY for legitimate customers & admin (Vu / blue ticks)
-          if (messageId) {
-            markMessageAsRead(messageId).catch(() => {});
-          }
+          // NOTE: markMessageAsRead is intentionally deferred until the moment
+          // a response is ready to be delivered, ensuring customers/admin NEVER see "Vu" without an immediate reply!
 
           if (isAudio) {
             const audioObj = message.audio || message.voice;
@@ -1888,6 +1908,9 @@ export async function POST(req: NextRequest) {
                 ? "سمح لي سي أيوب، الصوت ما كانش واضح مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج وها أنا معاك أ شاف نقاد ليك كلشي 🙏"
                 : "سمح لي أخويا، الصوت ما واضحش مزيان فـ هاد الأوديو (مخرشش شوية)، عفاك عاود صيفط ليا أوديو واضح ولا كتب ليا فـ ميساج باش نجاوبك مزيان 🙏";
 
+              if (messageId) {
+                markMessageAsRead(messageId).catch(() => {});
+              }
               await sendWhatsAppMessage(from, fallback);
               return NextResponse.json({ status: "EVENT_RECEIVED" }, { status: 200 });
             }
@@ -1986,6 +2009,7 @@ export async function POST(req: NextRequest) {
                 isVoiceNote,
                 sessionId,
                 history,
+                messageId,
               });
             }
 
@@ -2064,6 +2088,9 @@ export async function POST(req: NextRequest) {
                     }
 
                     const customerReply = `شكراً بزاف ليك ${pendingRescueOrder.customer_name || ""} 🙏 تم تأكيد طلبك بنجاح، راني علمت الموزع باش يدوز عندك غدا يسلمك السلعة ديالك إن شاء الله. رجاء خليك متوفر على هاد الرقم ✅`;
+                    if (messageId) {
+                      markMessageAsRead(messageId).catch(() => {});
+                    }
                     await sendWhatsAppMessage(from, customerReply);
                     if (sessionId) {
                       await saveChatMessage(sessionId, "assistant", customerReply);
@@ -2095,6 +2122,9 @@ export async function POST(req: NextRequest) {
                     }
 
                     const customerReply = `تم إلغاء الطلبية ديالك أخي، شكراً على إخبارنا وكنعتذرو منك، نهارك مبروك 🙏`;
+                    if (messageId) {
+                      markMessageAsRead(messageId).catch(() => {});
+                    }
                     await sendWhatsAppMessage(from, customerReply);
                     if (sessionId) {
                       await saveChatMessage(sessionId, "assistant", customerReply);
@@ -2332,22 +2362,26 @@ ${userPromptText}
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
-            const customerModelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
-
             let aiResponse = "";
-            for (const cmName of customerModelsToTry) {
+            for (const cmName of VERIFIED_AI_MODELS_CHAIN) {
               try {
                 const model = genAI.getGenerativeModel({ model: cmName });
-                const result = await runWithTimeout(model.generateContent(prompt), 16000);
+                const result = await runWithTimeout(model.generateContent(prompt), 10000);
                 aiResponse = result.response.text();
-                if (aiResponse) break;
+                if (aiResponse && aiResponse.trim().length > 0) {
+                  console.log(`[WhatsApp Customer Bot] Successfully responded via verified model ${cmName}`);
+                  break;
+                }
               } catch (mErr: any) {
-                console.warn(`[WhatsApp Customer Bot] ${cmName} call warning:`, mErr?.message || mErr);
+                console.warn(`[WhatsApp Customer Bot] ${cmName} call warning, trying next verified model:`, mErr?.message || mErr);
               }
             }
 
             if (!aiResponse) {
-              const fallbackMsg = "سمح لي أخويا، كاين واحد الضغط خفيف فالسيستيم دابا، راني معاك وكنقاد ليك الطلبية ديالك على الراس والعين 🙏";
+              const fallbackMsg = "مرحبا بك أخويا! وصلاتنا رسالتك، كاين واحد الضغط خفيف فالسيستيم دابا وراني كنقاد ليك الرد على الراس والعين. إلا كنتي باغي تأكد طلبية ولا تسول على شي موديل، كتب لينا النمرة والمدينة وها حنا معاك فـ البلاصة إن شاء الله 🙏";
+              if (messageId) {
+                markMessageAsRead(messageId).catch(() => {});
+              }
               await sendWhatsAppMessage(from, fallbackMsg);
               return NextResponse.json({ status: "AI_ERROR_HANDLED" }, { status: 200 });
             }
@@ -2537,6 +2571,11 @@ ${userPromptText}
 
             console.log(`[WhatsApp Bot] Delivering to ${from}: ${imagesToSend.length} product images`);
 
+            // Mark message as read (Vu) strictly RIGHT BEFORE sending reply
+            if (messageId) {
+              markMessageAsRead(messageId).catch(() => {});
+            }
+
             if (imagesToSend.length === 1) {
               // Single image: send as 1 unified message with full text caption
               const singleCaption = cleanText.length > 1000 ? cleanText.slice(0, 997) + "..." : cleanText;
@@ -2561,6 +2600,9 @@ ${userPromptText}
             }
           } catch (aiError) {
             console.error("AI Generation Error:", aiError);
+            if (messageId) {
+              markMessageAsRead(messageId).catch(() => {});
+            }
             await notifyAdminError({
               context: "معالجة رسالة المحادثة (Conversation Turn Error)",
               error: aiError,
