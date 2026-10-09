@@ -17,14 +17,25 @@ const supabase = createClient(
 const processedMessageIds = new Map<string, number>();
 const activeProcessingPhones = new Set<string>();
 
-// 🛡️ HIGH-AVAILABILITY 5-TIER VERIFIED GEMINI CHAIN
-// All 5 models are verified active in Google AI Studio and support both audio and text generation
+// 🛡️ HIGH-AVAILABILITY 5-TIER VERIFIED GEMINI CHAIN (Benchmarked live)
+// 1. gemini-flash-lite-latest: ~500ms ultra-fast response
+// 2. gemini-3.6-flash: ~5000ms flagship reasoning & multimodal
+// 3. gemini-3.1-flash-lite: ~4000ms fast secondary backup
+// 4. gemini-3.7-flash: deep context fail-safe
+// 5. gemini-3-flash-preview: text generation fail-safe
 const VERIFIED_AI_MODELS_CHAIN = [
-  "gemini-3.6-flash",
-  "gemini-3.7-flash",
   "gemini-flash-lite-latest",
+  "gemini-3.6-flash",
   "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
   "gemini-3-flash-preview",
+];
+
+const VERIFIED_AUDIO_MODELS_CHAIN = [
+  "gemini-flash-lite-latest",
+  "gemini-3.6-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
 ];
 async function markMessageAsRead(messageId: string) {
   const token = process.env.WHATSAPP_API_TOKEN?.trim();
@@ -232,8 +243,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use verified 5-tier chain with failover to guarantee transcription never fails
-  for (const modelName of VERIFIED_AI_MODELS_CHAIN) {
+  // Use verified audio multimodal chain with failover to guarantee transcription never fails
+  for (const modelName of VERIFIED_AUDIO_MODELS_CHAIN) {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: modelName });

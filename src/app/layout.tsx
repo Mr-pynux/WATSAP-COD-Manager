@@ -8,7 +8,12 @@ export const metadata: Metadata = {
   description:
     "ShoeSpot — حذاء رياضي، توصيل 24-48 ساعة لجميع المدن المغربية.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: [
+      { url: "/icon.png", sizes: "any" },
+      { url: "/shoespot-logo.png", type: "image/png" },
+    ],
+    shortcut: "/icon.png",
+    apple: "/shoespot-logo.png",
   },
 };
 
