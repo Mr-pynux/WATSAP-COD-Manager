@@ -265,6 +265,8 @@ export default function AdminOrdersPage() {
       if (res.success && res.tracking) {
         toast.success(`تم إرسال الطلب #${order.orderNumber} مباشرة لمنصة Express Coursier! كود التتبع: ${res.tracking}`);
         load();
+      } else {
+        toast.error((res as any)?.error || "تعذر إرسال الطلب إلى Express Coursier");
       }
     } catch (err: any) {
       toast.error(err.message || "تعذر إرسال الطلب إلى Express Coursier");

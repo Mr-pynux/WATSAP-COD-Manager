@@ -322,84 +322,97 @@ export async function updateOrderDetailsServer(id: string, body: Record<string, 
 }
 
 export async function dispatchOrderToExpressCoursierServer(id: string) {
-  const supabase = await verifyAdmin();
+  try {
+    const supabase = await verifyAdmin();
 
-  // 1. Fetch order details with product
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select("*, product:product_id(name)")
-    .eq("id", id)
-    .single();
+    // 1. Fetch order details with product
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*, product:product_id(name)")
+      .eq("id", id)
+      .single();
 
-  if (error || !order) {
-    throw new Error(error?.message || "الطلبية غير موجودة");
-  }
+    if (error || !order) {
+      return { success: false, error: error?.message || "الطلبية غير موجودة" };
+    }
 
-  // 2. Courier ID for Express Coursier
-  const courierId = "87fbd228-a050-4183-9c60-3fc071698389";
+    // 2. Courier ID for Express Coursier
+    const courierId = "87fbd228-a050-4183-9c60-3fc071698389";
 
-  // Build product description
-  let productText = "";
-  if (Array.isArray(order.items) && order.items.length > 0) {
-    productText = order.items
-      .map((it: any) => `${it.name || "منتج"} (${it.size || ""}) x${it.quantity || 1}`)
-      .join(" + ");
-  } else {
-    productText = `${order.product?.name || "منتج"} (${order.size || ""}) x${order.quantity || 1}`;
-  }
+    // Build product description
+    let productText = "";
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      productText = order.items
+        .map((it: any) => `${it.name || "منتج"} (${it.size || ""}) x${it.quantity || 1}`)
+        .join(" + ");
+    } else {
+      productText = `${order.product?.name || "منتج"} (${order.size || ""}) x${order.quantity || 1}`;
+    }
 
-  const address =
-    [order.district, order.landmark].filter(Boolean).join(" - ") ||
-    order.city ||
-    "العنوان غير محدد";
+    const address =
+      [order.district, order.landmark].filter(Boolean).join(" - ") ||
+      order.city ||
+      "العنوان غير محدد";
 
-  // 3. Call Express Coursier Live Platform API (expresscoursier.ma)
-  const parcelRes = await createExpressCoursierParcel({
-    receiver_name: order.customer_name || "زبون",
-    address,
-    city: order.city || "Casablanca",
-    phone: order.phone,
-    price: (order.unit_price_mad || 0) * (order.quantity || 1),
-    product: productText,
-    note: order.notes || "",
-    internal_id: String(order.order_number || order.id.slice(0, 8)),
-  });
+    // 3. Call Express Coursier Live Platform API (expresscoursier.ma)
+    const parcelRes = await createExpressCoursierParcel({
+      receiver_name: order.customer_name || "زبون",
+      address,
+      city: order.city || "Casablanca",
+      phone: order.phone,
+      price: (order.unit_price_mad || 0) * (order.quantity || 1),
+      product: productText,
+      note: order.notes || "",
+      internal_id: String(order.order_number || order.id.slice(0, 8)),
+    });
 
-  if (!parcelRes.success || !parcelRes.package_id) {
-    throw new Error(parcelRes.error || "فشل إرسال الكولية إلى منصة Express Coursier");
-  }
+    if (!parcelRes.success || !parcelRes.package_id) {
+      return {
+        success: false,
+        error: parcelRes.error || "فشل إرسال الكولية إلى منصة Express Coursier",
+      };
+    }
 
-  // 4. Update order in Supabase with real Express Coursier package tracking code
-  const { error: updateErr } = await supabase
-    .from("orders")
-    .update({
-      status: "shipped",
-      courier_id: courierId,
-      tracking: parcelRes.package_id,
-      shipped_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+    // 4. Update order in Supabase with real Express Coursier package tracking code
+    const { error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        status: "shipped",
+        courier_id: courierId,
+        tracking: parcelRes.package_id,
+        shipped_at: new Date().toISOString(),
+      })
+      .eq("id", id);
 
-  if (updateErr) throw new Error(updateErr.message);
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
 
-  // 5. Log order event
-  await supabase.from("order_events").insert({
-    order_id: id,
-    type: "express_coursier_dispatched",
-    detail: {
+    // 5. Log order event
+    await supabase.from("order_events").insert({
+      order_id: id,
+      type: "express_coursier_dispatched",
+      detail: {
+        package_id: parcelRes.package_id,
+        tracking: parcelRes.package_id,
+        store_id: 12515,
+        dispatched_at: new Date().toISOString(),
+        created_on_express_site: true,
+      },
+    });
+
+    return {
+      success: true,
       package_id: parcelRes.package_id,
       tracking: parcelRes.package_id,
-      store_id: 12515,
-      dispatched_at: new Date().toISOString(),
-      created_on_express_site: true,
-    },
-  });
-
-  return {
-    success: true,
-    package_id: parcelRes.package_id,
-    tracking: parcelRes.package_id,
-  };
+    };
+  } catch (err: any) {
+    console.error("[dispatchOrderToExpressCoursierServer Error]:", err);
+    return {
+      success: false,
+      error: err.message || "حدث خطأ غير متوقع أثناء الاتصال بشركة التوصيل",
+    };
+  }
 }
 
 export async function bulkDispatchOrdersToExpressCoursierServer(ids: string[]) {
