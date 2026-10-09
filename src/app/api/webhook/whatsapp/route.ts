@@ -1147,6 +1147,7 @@ async function handleAdminWhatsAppMessage({
             prodName = (o.product as any).name;
           }
 
+          let itemsDesc = "";
           if (Array.isArray(o.items) && o.items.length > 0) {
             itemsDesc = o.items.map((it: any) => `${it.name || prodName} (نمرة ${it.size}${it.color ? `, لون ${it.color}` : ''})`).join(" + ");
           } else {
