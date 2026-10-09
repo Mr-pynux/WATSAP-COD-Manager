@@ -907,7 +907,7 @@ async function dispatchExistingOrderToExpressCoursier(orderIdOrNumber: string | 
     price: (order.unit_price_mad || 0) * (order.quantity || 1),
     product: productText,
     note: order.notes || "",
-    internal_id: String(order.order_number || order.id.slice(0, 8)),
+    internal_id: order.order_number ? `ORD-${order.order_number}` : `ORD-${order.id.slice(0, 8)}`,
   });
 
   const trackingCode = parcelRes.package_id || order.tracking || `CL-EXP-${Math.floor(10000 + Math.random() * 90000)}`;

@@ -46,7 +46,13 @@ export async function getOrdersServer(
     query = query.eq("courier_id", filters.courierId);
   }
   if (filters.phone && filters.phone.trim() !== "") {
-    query = query.ilike("phone", `%${filters.phone.trim()}%`);
+    const term = filters.phone.trim();
+    const cleanNum = parseInt(term.replace(/\D/g, ""), 10);
+    if (!isNaN(cleanNum) && term.length <= 6 && !term.startsWith("0")) {
+      query = query.or(`order_number.eq.${cleanNum},phone.ilike.%${term}%,tracking.ilike.%${term}%,customer_name.ilike.%${term}%`);
+    } else {
+      query = query.or(`phone.ilike.%${term}%,tracking.ilike.%${term}%,customer_name.ilike.%${term}%`);
+    }
   }
   if (filters.from) {
     query = query.gte("created_at", `${filters.from}T00:00:00Z`);
@@ -363,7 +369,7 @@ export async function dispatchOrderToExpressCoursierServer(id: string) {
       price: (order.unit_price_mad || 0) * (order.quantity || 1),
       product: productText,
       note: order.notes || "",
-      internal_id: String(order.order_number || order.id.slice(0, 8)),
+      internal_id: order.order_number ? `ORD-${order.order_number}` : `ORD-${order.id.slice(0, 8)}`,
     });
 
     if (!parcelRes.success || !parcelRes.package_id) {

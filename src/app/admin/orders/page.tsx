@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   ChevronRight,
   ChevronLeft,
+  Copy,
+  Check,
   Download,
   ExternalLink,
   FilterX,
@@ -257,6 +259,16 @@ export default function AdminOrdersPage() {
 
   
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [copiedTracking, setCopiedTracking] = useState<string | null>(null);
+
+  function copyTrackingToClipboard(code: string) {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(code);
+    }
+    setCopiedTracking(code);
+    toast.success(`تم نسخ كود التتبع: ${code}`);
+    setTimeout(() => setCopiedTracking(null), 2500);
+  }
 
   async function handleDispatchExpress(order: OrderDTO) {
     try {
@@ -431,16 +443,15 @@ export default function AdminOrdersPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">بحث بالهاتف</Label>
+            <Label className="text-xs text-muted-foreground">بحث بالهاتف أو كود التتبع أو الرقم</Label>
             <div className="relative">
               <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={phoneInput}
                 onChange={(e) => setPhoneInput(e.target.value)}
-                placeholder="06..."
+                placeholder="06... أو CL-EXP... أو #30"
                 dir="ltr"
                 className="h-10 ps-9 text-left ltr-num"
-                inputMode="numeric"
               />
             </div>
           </div>
@@ -567,6 +578,7 @@ export default function AdminOrdersPage() {
                       <TableHead>المحاولات</TableHead>
                       <TableHead>التاريخ</TableHead>
                       <TableHead>الحالة</TableHead>
+                      <TableHead>كود التتبع</TableHead>
                       <TableHead className="text-end">إجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -699,6 +711,38 @@ export default function AdminOrdersPage() {
                             </Select>
                           </TableCell>
                           <TableCell>
+                            {o.tracking ? (
+                              <div className="space-y-1">
+                                <div className="inline-flex items-center gap-1.5 bg-sky-500/10 dark:bg-sky-950/60 border border-sky-500/25 px-2 py-1 rounded-md">
+                                  <span className="font-mono text-xs font-bold text-sky-800 dark:text-sky-300 ltr-num select-all">
+                                    {o.tracking}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+                                    onClick={() => copyTrackingToClipboard(o.tracking)}
+                                    title="نسخ كود التتبع"
+                                    aria-label="نسخ كود التتبع"
+                                  >
+                                    {copiedTracking === o.tracking ? (
+                                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                                {o.courier && (
+                                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Truck className="h-3 w-3 text-sky-600" />
+                                    {o.courier.name}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/50">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center justify-end gap-1.5">
                                                             <Button
                                 variant="outline"
@@ -797,6 +841,33 @@ export default function AdminOrdersPage() {
                         {Math.round(o.totalMad)} د.م
                       </span>
                     </div>
+
+                    {o.tracking && (
+                      <div className="flex items-center justify-between bg-sky-500/10 border border-sky-500/25 rounded-lg px-2.5 py-1.5 text-xs">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Truck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                          <span className="text-muted-foreground text-[11px] shrink-0">كود التتبع:</span>
+                          <span className="font-mono font-bold text-sky-800 dark:text-sky-300 truncate select-all">{o.tracking}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 rounded transition-colors shrink-0"
+                          onClick={() => copyTrackingToClipboard(o.tracking)}
+                        >
+                          {copiedTracking === o.tracking ? (
+                            <>
+                              <Check className="h-3 w-3 text-emerald-600" />
+                              <span>تم النسخ</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3 w-3" />
+                              <span>نسخ</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
 
                     {o.items && o.items.length > 1 ? (
                       <div className="bg-muted/60 p-2.5 rounded-lg space-y-1.5 border border-muted">
