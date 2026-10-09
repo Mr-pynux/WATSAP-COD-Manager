@@ -11,6 +11,7 @@ import {
   Truck,
   CheckCircle2,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { getOrderByIdServer } from "../actions";
 import { Badge } from "@/components/ui/badge";
@@ -115,13 +116,21 @@ export default async function OrderDetailPage({ params }: PageProps) {
                   className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors shadow-2xs"
                 >
                   {/* Shoe Photo */}
-                  <div className="relative h-32 w-32 sm:h-28 sm:w-28 rounded-xl overflow-hidden border bg-muted shrink-0 shadow-xs flex items-center justify-center">
+                  <div className="relative h-32 w-32 sm:h-28 sm:w-28 rounded-xl overflow-hidden border bg-muted shrink-0 shadow-xs flex items-center justify-center group">
                     {it.imageUrl ? (
-                      <img
-                        src={it.imageUrl}
-                        alt={it.name}
-                        className="h-full w-full object-cover"
-                      />
+                      <a
+                        href={it.imageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-full w-full block cursor-zoom-in relative"
+                        title="مشاهدة وتكبير الصورة"
+                      >
+                        <img
+                          src={it.imageUrl}
+                          alt={it.name}
+                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      </a>
                     ) : (
                       <Package className="h-10 w-10 text-muted-foreground" />
                     )}
@@ -130,9 +139,20 @@ export default async function OrderDetailPage({ params }: PageProps) {
                   {/* Shoe Details */}
                   <div className="flex-1 text-center sm:text-start space-y-2 w-full">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <h3 className="font-bold text-base sm:text-lg text-foreground">
-                        {it.name}
-                      </h3>
+                      {it.productId ? (
+                        <Link
+                          href={`/admin/products/${it.productId}`}
+                          className="font-bold text-base sm:text-lg text-foreground hover:text-primary transition-colors flex items-center justify-center sm:justify-start gap-1.5 group"
+                          title="مشاهدة وتعديل المنتج"
+                        >
+                          <span>{it.name}</span>
+                          <ExternalLink className="h-4 w-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        </Link>
+                      ) : (
+                        <h3 className="font-bold text-base sm:text-lg text-foreground">
+                          {it.name}
+                        </h3>
+                      )}
                       <span className="font-bold text-lg ltr-num text-emerald-600 dark:text-emerald-400">
                         {Math.round((it.priceMad || order.unitPriceMad) * (it.quantity || 1))} د.م
                       </span>

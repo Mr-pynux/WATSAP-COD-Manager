@@ -74,6 +74,11 @@ export async function getOrdersServer(
     }
   }
 
+  // Fetch all active/available products for image resolution fallback
+  const { data: allProductsList } = await supabase
+    .from("products")
+    .select("id, name, image_urls");
+
   const orders = (data || []).map((row: any) => {
     const primaryItem = {
       productId: row.product?.id || row.product_id,
@@ -85,9 +90,32 @@ export async function getOrdersServer(
       imageUrl: row.product?.image_urls?.[0] || null,
     };
     const eventItems = itemsByOrderId[row.id];
-    const items = Array.isArray(row.items) && row.items.length > 0 
+    const rawItems = Array.isArray(row.items) && row.items.length > 0 
       ? row.items 
       : (eventItems && eventItems.length > 0 ? eventItems : [primaryItem]);
+
+    const items = rawItems.map((it: any) => {
+      let img = it.imageUrl;
+      let pid = it.productId;
+      if (!img || !pid) {
+        const itNameLower = (it.name || "").toLowerCase();
+        const matched = (allProductsList || []).find((p: any) =>
+          (pid && p.id === pid) ||
+          (itNameLower && (p.name.toLowerCase().includes(itNameLower) || itNameLower.includes(p.name.toLowerCase()))) ||
+          (itNameLower.includes("cobra") && p.name.toLowerCase().includes("cobra")) ||
+          (itNameLower.includes("balance") && p.name.toLowerCase().includes("balance"))
+        );
+        if (matched) {
+          if (!img && matched.image_urls?.[0]) img = matched.image_urls[0];
+          if (!pid) pid = matched.id;
+        }
+      }
+      return {
+        ...it,
+        productId: pid || row.product_id,
+        imageUrl: img || row.product?.image_urls?.[0] || null,
+      };
+    });
 
     return {
       id: row.id,
@@ -520,9 +548,37 @@ export async function getOrderByIdServer(id: string): Promise<OrderDTO | null> {
     imageUrl: row.product?.image_urls?.[0] || null,
   };
 
-  const items = Array.isArray(row.items) && row.items.length > 0
+  const rawItems = Array.isArray(row.items) && row.items.length > 0
     ? row.items
     : (eventItems && eventItems.length > 0 ? eventItems : [primaryItem]);
+
+  // Fetch all products to guarantee images and valid product IDs
+  const { data: allProductsList } = await supabase
+    .from("products")
+    .select("id, name, image_urls");
+
+  const items = rawItems.map((it: any) => {
+    let img = it.imageUrl;
+    let pid = it.productId;
+    if (!img || !pid) {
+      const itNameLower = (it.name || "").toLowerCase();
+      const matched = (allProductsList || []).find((p: any) => 
+        (pid && p.id === pid) ||
+        (itNameLower && (p.name.toLowerCase().includes(itNameLower) || itNameLower.includes(p.name.toLowerCase()))) ||
+        (itNameLower.includes("cobra") && p.name.toLowerCase().includes("cobra")) ||
+        (itNameLower.includes("balance") && p.name.toLowerCase().includes("balance"))
+      );
+      if (matched) {
+        if (!img && matched.image_urls?.[0]) img = matched.image_urls[0];
+        if (!pid) pid = matched.id;
+      }
+    }
+    return {
+      ...it,
+      productId: pid || row.product_id,
+      imageUrl: img || row.product?.image_urls?.[0] || null,
+    };
+  });
 
   return {
     id: row.id,
