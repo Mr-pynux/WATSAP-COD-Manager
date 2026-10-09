@@ -222,8 +222,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use gemini-3.8-flash first for high speed, reliability, and accuracy in Darija transcription, with gemini-3.6-flash and gemini-3.7-flash as fallbacks
-  const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
+  // Use gemini-3.6-flash first for high stability, fast latency, and zero rate limits, with 3.7 and 3.8 as fallbacks
+  const modelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
 
   for (const modelName of modelsToTry) {
     try {
@@ -240,7 +240,7 @@ async function transcribeAudioWithGemini(
           },
           "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
         ]),
-        6000
+        15000
       );
 
       const text = result.response.text().trim();
@@ -1374,11 +1374,11 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let aiResponse = "";
-    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
+    const adminModelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
     for (const mName of adminModelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
-        const result = await runWithTimeout(model.generateContent(adminPrompt), 7000);
+        const result = await runWithTimeout(model.generateContent(adminPrompt), 16000);
         aiResponse = result.response.text();
         if (aiResponse) break;
       } catch (err: any) {
@@ -2332,13 +2332,13 @@ ${userPromptText}
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
-            const customerModelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
+            const customerModelsToTry = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"];
 
             let aiResponse = "";
             for (const cmName of customerModelsToTry) {
               try {
                 const model = genAI.getGenerativeModel({ model: cmName });
-                const result = await runWithTimeout(model.generateContent(prompt), 7000);
+                const result = await runWithTimeout(model.generateContent(prompt), 16000);
                 aiResponse = result.response.text();
                 if (aiResponse) break;
               } catch (mErr: any) {
