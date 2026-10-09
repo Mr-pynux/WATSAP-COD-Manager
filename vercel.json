@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/evening-dispatch",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/returns-rescue",
+      "schedule": "0 10 * * *"
     }
   ]
 }

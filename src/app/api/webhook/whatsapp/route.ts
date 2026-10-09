@@ -211,8 +211,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use gemini-3.5-flash first for high stability and accuracy, with robust fallbacks
-  const modelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+  // Use gemini-3.8-flash first for high speed, reliability, and accuracy in Darija transcription
+  const modelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
 
   for (const modelName of modelsToTry) {
     try {
@@ -250,7 +250,7 @@ async function analyzeIncomingImageWithGemini(
 ): Promise<{ details: string; detectedSize: string | null } | null> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
 
     const catalogBrief = products.map((p) => `- ${p.name} (معرف: ${p.id})`).join("\n");
 
@@ -988,7 +988,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let aiResponse = "";
-    const adminModelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
     for (const mName of adminModelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
@@ -1571,7 +1571,121 @@ export async function POST(req: NextRequest) {
               });
             }
 
+            // 🛑 CHECK IF CUSTOMER IS RESPONDING TO A RETURNS RESCUE NOTIFICATION:
+            const { data: pendingRescueOrder } = await supabase
+              .from("orders")
+              .select("id, order_number, customer_name, city, unit_price_mad, quantity, status, tracking, phone")
+              .or(`phone.eq.${phone06},phone.eq.${phone212}`)
+              .gte("created_at", "2026-10-09T00:00:00.000Z")
+              .in("status", ["shipped", "postponed"])
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
 
+            if (pendingRescueOrder) {
+              const { data: rescueEvent } = await supabase
+                .from("order_events")
+                .select("id, created_at")
+                .eq("order_id", pendingRescueOrder.id)
+                .eq("type", "returns_rescue_sent")
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (rescueEvent) {
+                const eventAge = Date.now() - new Date(rescueEvent.created_at).getTime();
+                if (eventAge < 5 * 24 * 60 * 60 * 1000) {
+                  const cleanedText = (msg_body || "").trim().toLowerCase();
+                  const isConfirm =
+                    cleanedText === "1" ||
+                    cleanedText.includes("تأكيد") ||
+                    cleanedText.includes("صيفط") ||
+                    cleanedText.includes("غدا") ||
+                    cleanedText.includes("نعم") ||
+                    cleanedText.includes("اه") ||
+                    cleanedText.includes("واخا") ||
+                    cleanedText.includes("مرحبا");
+
+                  const isCancel =
+                    cleanedText === "2" ||
+                    cleanedText.includes("إلغاء") ||
+                    cleanedText.includes("الغاء") ||
+                    cleanedText.includes("لغي") ||
+                    cleanedText.includes("ما بغيت") ||
+                    cleanedText.includes("مابغيت") ||
+                    cleanedText.includes("صافي بلا");
+
+                  if (isConfirm) {
+                    await supabase.from("orders").update({
+                      status: "postponed",
+                      notes: `[إنقاذ الكولية: الزبون أكد الاستلام لغدا فـ الواتساب]`,
+                    }).eq("id", pendingRescueOrder.id);
+
+                    await supabase.from("order_events").insert({
+                      order_id: pendingRescueOrder.id,
+                      type: "returns_rescue_confirmed",
+                      detail: {
+                        customer_reply: msg_body,
+                        confirmed_at: new Date().toISOString(),
+                      },
+                    });
+
+                    const totalMad = pendingRescueOrder.unit_price_mad * pendingRescueOrder.quantity;
+                    const adminAlert =
+                      `🎉 *[كولية تم إنقاذها بنجاح من الرجوع!]* ✅\n\n` +
+                      `📦 الطلبية: *#${pendingRescueOrder.order_number}*\n` +
+                      `👤 الزبون: ${pendingRescueOrder.customer_name}\n` +
+                      `📍 المدينة: ${pendingRescueOrder.city}\n` +
+                      `📱 الهاتف: ${pendingRescueOrder.phone}\n` +
+                      `💰 المبلغ: *${totalMad} درهم*\n` +
+                      `🔖 كود التتبع: ${pendingRescueOrder.tracking || "—"}\n\n` +
+                      `👉 *الزبون جاوب بـ التأكيد وباغي يستلم غدا!* يرجى الدخول لـ Express Coursier والضغط على: *Remise en distribution* 🚀`;
+
+                    if (ADMIN_PHONE) {
+                      await sendDirectWhatsAppMessage(ADMIN_PHONE, adminAlert);
+                    }
+
+                    const customerReply = `شكراً بزاف ليك ${pendingRescueOrder.customer_name || ""} 🙏 تم تأكيد طلبك بنجاح، راني علمت الموزع باش يدوز عندك غدا يسلمك السلعة ديالك إن شاء الله. رجاء خليك متوفر على هاد الرقم ✅`;
+                    await sendWhatsAppMessage(from, customerReply);
+                    if (sessionId) {
+                      await saveChatMessage(sessionId, "assistant", customerReply);
+                    }
+                    return NextResponse.json({ status: "RETURNS_RESCUE_CONFIRMED" }, { status: 200 });
+                  } else if (isCancel) {
+                    await supabase.from("orders").update({
+                      status: "returned",
+                      return_reason: "إلغاء من الزبون عند محاولة الإنقاذ",
+                    }).eq("id", pendingRescueOrder.id);
+
+                    await supabase.from("order_events").insert({
+                      order_id: pendingRescueOrder.id,
+                      type: "returns_rescue_canceled",
+                      detail: {
+                        customer_reply: msg_body,
+                        canceled_at: new Date().toISOString(),
+                      },
+                    });
+
+                    const adminAlert =
+                      `⚠️ *[الزبون ألغى الكولية المعلقة]* ❌\n\n` +
+                      `📦 الطلبية: *#${pendingRescueOrder.order_number}* (${pendingRescueOrder.customer_name})\n` +
+                      `📍 المدينة: ${pendingRescueOrder.city}\n` +
+                      `تم تحويلها لـ *راجعة (Returned)* لتفادي تضييع المزيد من الوقت ومصاريف إضافية.`;
+
+                    if (ADMIN_PHONE) {
+                      await sendDirectWhatsAppMessage(ADMIN_PHONE, adminAlert);
+                    }
+
+                    const customerReply = `تم إلغاء الطلبية ديالك أخي، شكراً على إخبارنا وكنعتذرو منك، نهارك مبروك 🙏`;
+                    await sendWhatsAppMessage(from, customerReply);
+                    if (sessionId) {
+                      await saveChatMessage(sessionId, "assistant", customerReply);
+                    }
+                    return NextResponse.json({ status: "RETURNS_RESCUE_CANCELED" }, { status: 200 });
+                  }
+                }
+              }
+            }
 
             const [botSettingsRes, productsRes, previousOrdersRes] = await Promise.all([
               supabase.from("bot_settings").select("*").limit(1).single(),
@@ -1800,7 +1914,7 @@ ${userPromptText}
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
-            const customerModelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+            const customerModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
 
             let aiResponse = "";
             for (const cmName of customerModelsToTry) {
