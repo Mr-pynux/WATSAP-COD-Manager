@@ -205,6 +205,15 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ base64: string;
   }
 }
 
+function runWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 // Function to transcribe Moroccan Darija voice notes using Gemini Multimodal Audio
 async function transcribeAudioWithGemini(
   base64Audio: string,
@@ -219,15 +228,18 @@ async function transcribeAudioWithGemini(
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: modelName });
 
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            mimeType: mimeType || "audio/ogg",
-            data: base64Audio,
+      const result = await runWithTimeout(
+        model.generateContent([
+          {
+            inlineData: {
+              mimeType: mimeType || "audio/ogg",
+              data: base64Audio,
+            },
           },
-        },
-        "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
-      ]);
+          "أنت مفرغ صوتي محترف للدارجة المغربية (Speech-to-Text). اكتب النص المنطوق في هذا الأوديو بالدارجة المغربية بدقة تامة وبدون أي مقدمات أو شرح أو إضافات. اكتب فقط ما قاله المتحدث حرفياً.",
+        ]),
+        6000
+      );
 
       const text = result.response.text().trim();
       if (text && text.length >= 2) {
@@ -794,6 +806,7 @@ async function handleAdminWhatsAppMessage({
       recentOrdersRes,
       reclamationsRes,
       productsRes,
+      latestDeliveredOrdersRes,
     ] = await Promise.all([
       supabase
         .from("orders")
@@ -816,6 +829,12 @@ async function handleAdminWhatsAppMessage({
         .from("products")
         .select("id, name, price_mad, stock_by_size, active, sizes, colors")
         .eq("active", true),
+      supabase
+        .from("orders")
+        .select("id, order_number, customer_name, phone, city, status, unit_price_mad, quantity, delivered_at, created_at, tracking, notes, product:product_id(name)")
+        .eq("status", "delivered")
+        .order("delivered_at", { ascending: false, nullsFirst: false })
+        .limit(5),
     ]);
 
     const todayOrders = todayOrdersRes.data || [];
@@ -823,6 +842,7 @@ async function handleAdminWhatsAppMessage({
     const recentOrders = recentOrdersRes.data || [];
     const allReclamations = reclamationsRes.data || [];
     const activeProducts = productsRes.data || [];
+    const latestDelivered = latestDeliveredOrdersRes.data || [];
 
     // Calculate metrics
     const todayStatusMap: Record<string, number> = {};
@@ -880,6 +900,17 @@ async function handleAdminWhatsAppMessage({
       return `• ${p.name} | الثمن: ${p.price_mad} درهم | المخزون حسب النمرة: [${stockSummary}]`;
     }).join("\n");
 
+    // Format delivered orders text (Express Coursier / delivery status)
+    const deliveredOrdersText = latestDelivered.length > 0
+      ? latestDelivered.map((o: any) => {
+          const dTime = o.delivered_at
+            ? new Date(o.delivered_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Casablanca" })
+            : "—";
+          const tot = (Number(o.unit_price_mad) || 0) * (Number(o.quantity) || 1);
+          return `• الطلبية #${o.order_number} | الزبون: ${o.customer_name} (${o.phone}) | المدينة: ${o.city} | الحالة: [مسلّمة / Livré] | تاريخ التسليم: ${dTime} | الثمن: ${tot} درهم | التتبع: ${o.tracking || '—'}`;
+        }).join("\n")
+      : "لا توجد أي طلبيات مسلّمة (Livré) في النظام حتى الآن (0 طلبية مسلمة).";
+
     let specificOrderText = "";
     if (specificOrder) {
       let itemDetails = "";
@@ -936,6 +967,11 @@ ${recsText}
 وضعية المنتجات والمخزون (السطوك):
 ${productsText}
 ---
+🚚 وضعية شركة التوصيل (Express Coursier) والتسليم:
+• ربط Webhook مع Express Coursier: مفعّل ونشط (Active) للمتجر shoespot (ID: 12515).
+• آخر الطلبيات المسلّمة (Livré):
+${deliveredOrdersText}
+---
 ${specificOrderText}
 
 4. سجل المحادثة السابقة مع سي أيوب:
@@ -946,6 +982,10 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
 6. مهامك وصلاحياتك:
 • إذا سألك عن حالة الطلبيات أو المبيعات أو اليوم شنو داز: قدم له ملخصاً تنفيذياً سريعاً ومرتباً بالإيموجي.
+• إذا سألك عن شركة التوصيل (Express Coursier) أو آخر طلبية مسلّمة / ليڤري (Livré):
+  - جاوبه بدقة واحترافية وبدون أي ارتباك من المعطيات أعلاه.
+  - إذا كانت هناك طلبيات مسلّمة: اذكر له تفاصيل آخر طلبية تسلمت ورقمها وتاريخ تسليمها ومبلغها.
+  - وإذا لم تكن هناك أي طلبية مسلّمة بعد في النظام (0 Livré): قل له بوضوح ومباشرة: "قلبت فـ السيستيم وفـ شركة التوصيل Express Coursier، حالياً ما كاينا حتى شي طلبية مسجلة كـ مسلّمة (Livré). الطلبيات المسجلة حالياً راها ما زال فـ مرحلة التأكيد أو الشحن وما زال ما تسلمات حتى وحدة."
 • إذا سألك عن طلبية معينة (برقمها أو باسم الزبون أو هاتفه): أعطه كل تفاصيلها فوراً.
 • إذا سألك عن الشكايات (الريكلاماسيون) أو مشاكل التوصيل: لخص له الشكايات العالقة وأرقام الكليان.
 • إذا سألك عن السطوك: اذكر له السلعة المتوفرة أو الناقصة.
@@ -992,7 +1032,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
     for (const mName of adminModelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
-        const result = await model.generateContent(adminPrompt);
+        const result = await runWithTimeout(model.generateContent(adminPrompt), 7000);
         aiResponse = result.response.text();
         if (aiResponse) break;
       } catch (err: any) {
@@ -1001,7 +1041,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
     }
 
     if (!aiResponse) {
-      throw new Error("Failed to generate response from all Gemini models");
+      aiResponse = "أهلاً سي أيوب، راني معاك! كان واحد الضغط خفيف فـ سيرفر الذكاء الاصطناعي دابا، عفاك عاود صيفط ليا أوديو وها أنا معاك فـ البلاصة أ شاف 🙏";
     }
 
     console.log(`[Admin Assistant] Reply for Si Ayoub:\n${aiResponse}`);
@@ -1920,7 +1960,7 @@ ${userPromptText}
             for (const cmName of customerModelsToTry) {
               try {
                 const model = genAI.getGenerativeModel({ model: cmName });
-                const result = await model.generateContent(prompt);
+                const result = await runWithTimeout(model.generateContent(prompt), 7000);
                 aiResponse = result.response.text();
                 if (aiResponse) break;
               } catch (mErr: any) {
