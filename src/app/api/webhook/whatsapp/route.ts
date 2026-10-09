@@ -982,7 +982,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
   8. 🚫 وسم طلبية كـ "نصاب" وحظر الرقم تلقائياً (MARK AS SCAMMER):
      - إذا قال لك سي أيوب: "دير عليه نصاب"، "هذاك راه نصاب"، "ماركي طلبية 28 نصاب"، "كيتفلى ما بغاش يشد الكوموند":
        [MARK_SCAMMER: {"order_number": رقم_الطلبية, "reason": "نصاب - ما خداش الكوموند كيتفلى"}]
-     - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً. وأكد لسي أيوب أن البوت سيتركه على Vu (العلامات الزرقاء) ولن يجيبه إطلاقاً بعد الآن لمنع تبديله للرقم وحماية للرصيد والمخزون وبدون تضييع أي توكن.
+     - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً. وأكد لسي أيوب أن البوت سيتجاهل أي رسالة أو أوديو من عنده ولن يقرأها (ما كيطلعش ليه Vu نهائياً، كيبقى غير واصل رمادي) ولن يجيبه إطلاقاً لحماية التوكنز والمخزون وبدون أن ينتبه.
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
@@ -1377,11 +1377,6 @@ export async function POST(req: NextRequest) {
         try {
           console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
 
-          // Mark as read immediately on arrival (Vu / blue ticks)
-          if (messageId) {
-            markMessageAsRead(messageId).catch(() => {});
-          }
-
           let earlyCleanPhone = (from || "").replace(/\D/g, "");
           let earlyPhone06 = earlyCleanPhone;
           let earlyPhone212 = earlyCleanPhone;
@@ -1401,8 +1396,8 @@ export async function POST(req: NextRequest) {
 
           // 🛑 0. EARLY BLACKLIST & SCAMMER INTERCEPTION:
           // If sender is flagged as scammer (نصاب) or blacklisted:
-          // - Leave them strictly on "VU" (blue checkmarks via Meta markMessageAsRead)
-          // - NEVER send any reply message (so they don't know they are caught and don't switch SIMs)
+          // - DO NOT mark message as read (NO Vu / leave strictly as delivered grey ticks: وصل وصافي)
+          // - NEVER send any reply message
           // - ZERO Gemini tokens wasted: skip audio transcription, skip vision analysis, skip LLM calls!
           if (!isEarlyAdmin) {
             const [blacklistRes, scammerOrderRes] = await Promise.all([
@@ -1422,7 +1417,7 @@ export async function POST(req: NextRequest) {
             const isScammer = !!blacklistRes.data || (scammerOrderRes.data && scammerOrderRes.data.length > 0);
 
             if (isScammer) {
-              console.log(`[WhatsApp Bot] 🔇 Scammer/Blacklisted phone (${from} / ${earlyPhone06}) detected -> Leaving strictly on VU. No reply sent. 0 AI tokens wasted.`);
+              console.log(`[WhatsApp Bot] 🔇 Scammer/Blacklisted phone (${from} / ${earlyPhone06}) detected -> Leaving UNREAD (No Vu, delivered grey ticks only). No reply sent. 0 AI tokens wasted.`);
 
               // Auto-sync into blacklist table if detected via order status
               if (!blacklistRes.data) {
@@ -1433,13 +1428,14 @@ export async function POST(req: NextRequest) {
                 }, { onConflict: "phone" });
               }
 
-              // Ensure read receipt ("Vu") is definitely delivered to WhatsApp
-              if (messageId) {
-                await markMessageAsRead(messageId).catch(() => {});
-              }
-
-              return NextResponse.json({ status: "SCAMMER_LEFT_ON_VU" }, { status: 200 });
+              // DO NOT call markMessageAsRead - keep message unread (وصل وصافي)
+              return NextResponse.json({ status: "SCAMMER_DROPPED_UNREAD" }, { status: 200 });
             }
+          }
+
+          // Mark as read ONLY for legitimate customers & admin (Vu / blue ticks)
+          if (messageId) {
+            markMessageAsRead(messageId).catch(() => {});
           }
 
           if (isAudio) {
