@@ -30,6 +30,7 @@ export interface CourierDTO {
   feePerDeliveryMad: number;
   feePerReturnMad: number;
 }
+export type CourierStatsDTO = CourierDTO;
 
 export interface OrderItemDTO {
   productId: string;

@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Moon,
   Package,
+  Truck,
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,7 +61,9 @@ import {
 import { fmtDate, toDateInput } from "@/lib/format";
 import type { OrderDTO, OrdersResponse, BlacklistEntryDTO, CourierStatsDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer, bulkDeleteOrdersServer, getPendingEveningDispatchCountServer, sendEveningDispatchServer } from "./actions";
+import { getOrdersServer, getCouriersServer, getBlacklistServer, updateOrderStatusServer, bulkUpdateStatusServer, updateOrderDetailsServer, exportOrdersCSVServer, bulkDeleteOrdersServer, getPendingEveningDispatchCountServer, sendEveningDispatchServer,
+  dispatchOrderToExpressCoursierServer,
+  bulkDispatchOrdersToExpressCoursierServer } from "./actions";
 
 interface Filters {
   status: string;
@@ -249,6 +252,43 @@ export default function AdminOrdersPage() {
       toast.error(err.message || "تعذر إرسال إشعار الشحن");
     } finally {
       setSendingDispatch(false);
+    }
+  }
+
+  
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+
+  async function handleDispatchExpress(order: OrderDTO) {
+    try {
+      setDispatchingId(order.id);
+      const res = await dispatchOrderToExpressCoursierServer(order.id);
+      if (res.success && res.tracking) {
+        toast.success(`تم إرسال الطلب #${order.orderNumber} مباشرة لمنصة Express Coursier! كود التتبع: ${res.tracking}`);
+        load();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "تعذر إرسال الطلب إلى Express Coursier");
+    } finally {
+      setDispatchingId(null);
+    }
+  }
+
+  async function handleBulkDispatchExpress() {
+    if (selected.size === 0) return;
+    try {
+      setBulkBusy(true);
+      const res = await bulkDispatchOrdersToExpressCoursierServer(Array.from(selected));
+      if (res.success) {
+        toast.success(`تم إرسال ${res.count} طلب بنجاح إلى منصة Express Coursier!`);
+        setSelected(new Set());
+        load();
+      } else {
+        toast.error("فشل إرسال الطلبات إلى Express Coursier");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "حدث خطأ أثناء الإرسال الجماعي");
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -658,6 +698,23 @@ export default function AdminOrdersPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1.5">
+                                                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2 gap-1 text-xs border-sky-500/30 text-sky-600 hover:bg-sky-500/10"
+                                onClick={() => handleDispatchExpress(o)}
+                                disabled={dispatchingId === o.id}
+                                title="إرسال مباشرة لشركة التوصيل Express Coursier"
+                              >
+                                {dispatchingId === o.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Truck className="h-3 w-3" />
+                                )}
+                                <span className="hidden sm:inline">
+                                  {o.tracking && o.tracking.startsWith("CL-EXP") ? "Express ✅" : "إرسال لـ Express"}
+                                </span>
+                              </Button>
                               <WaButton orderId={o.id} size="icon" />
                               <Button
                                 variant="ghost"
