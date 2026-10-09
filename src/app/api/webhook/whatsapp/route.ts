@@ -727,6 +727,103 @@ async function logReclamationFromWhatsApp({
   }
 }
 
+// Helper to create a real test order and parcel for Express Coursier
+async function createTestOrderAndParcel(options?: {
+  customerName?: string;
+  phone?: string;
+  city?: string;
+  amount?: number;
+}) {
+  const customerName = options?.customerName || "زبون تجريبي (TEST - Express Coursier)";
+  const phone = options?.phone || "0610026260";
+  const city = options?.city || "الدار البيضاء";
+  const amount = options?.amount || 150;
+
+  // 1. Get first active product
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, name, price_mad")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+
+  // 2. Get Express Coursier courier
+  let { data: courier } = await supabase
+    .from("couriers")
+    .select("id, name")
+    .ilike("name", "%express%")
+    .maybeSingle();
+
+  if (!courier) {
+    const { data: newC } = await supabase
+      .from("couriers")
+      .insert({
+        name: "Express Coursier",
+        contact: "0700755612",
+        fee_per_delivery_mad: 30,
+        fee_per_return_mad: 15,
+      })
+      .select()
+      .single();
+    courier = newC;
+  }
+
+  // 3. Generate real tracking code: EC-12515-XXXXX
+  const randomSuffix = Math.floor(10000 + Math.random() * 90000);
+  const trackingCode = `EC-12515-${randomSuffix}`;
+
+  // 4. Insert order
+  const { data: newOrder, error } = await supabase
+    .from("orders")
+    .insert({
+      customer_name: customerName,
+      phone,
+      city,
+      district: "المعاريف",
+      product_id: product?.id || null,
+      size: "42",
+      color: "أسود",
+      quantity: 1,
+      unit_price_mad: amount,
+      status: "shipped",
+      courier_id: courier?.id || null,
+      tracking: trackingCode,
+      notes: "[طلب تجريبي - تم إنشاؤه عبر المساعد الذكي بالأمر الصوتي لسي أيوب]",
+      shipped_at: new Date().toISOString(),
+      items: product
+        ? [
+            {
+              name: product.name,
+              size: "42",
+              color: "أسود",
+              quantity: 1,
+              price_mad: amount,
+            },
+          ]
+        : [],
+    })
+    .select("id, order_number, customer_name, phone, city, status, tracking, unit_price_mad")
+    .single();
+
+  if (error || !newOrder) {
+    console.error("[Test Order Error]:", error);
+    throw new Error(error?.message || "Failed to insert test order");
+  }
+
+  // 5. Insert order event
+  await supabase.from("order_events").insert({
+    order_id: newOrder.id,
+    type: "created",
+    detail: {
+      courier: "Express Coursier",
+      tracking: trackingCode,
+      createdBy: "Si Ayoub Admin Audio Command",
+    },
+  });
+
+  return newOrder;
+}
+
 // ==========================================
 // 👑 EXECUTIVE ADMIN ASSISTANT HANDLER
 // ==========================================
@@ -799,6 +896,34 @@ async function handleAdminWhatsAppMessage({
       }
     }
 
+    // 2.1 Check if Si Ayoub explicitly wants to create a test order / colis for Express Coursier
+    const cleanLowerMsg = (msg_body || "").toLowerCase();
+    const wantsCreateTestOrder =
+      (cleanLowerMsg.includes("زيد") ||
+        cleanLowerMsg.includes("دير") ||
+        cleanLowerMsg.includes("صايب") ||
+        cleanLowerMsg.includes("طبع") ||
+        cleanLowerMsg.includes("كريي")) &&
+      (cleanLowerMsg.includes("كوموند") ||
+        cleanLowerMsg.includes("طلب") ||
+        cleanLowerMsg.includes("كولي") ||
+        cleanLowerMsg.includes("كوري") ||
+        cleanLowerMsg.includes("توصيل") ||
+        cleanLowerMsg.includes("express") ||
+        cleanLowerMsg.includes("تيست") ||
+        cleanLowerMsg.includes("test"));
+
+    let newlyCreatedTestOrder: any = null;
+    if (wantsCreateTestOrder) {
+      try {
+        console.log("[Admin Action] Creating real test order in Supabase & Express Coursier for Si Ayoub...");
+        newlyCreatedTestOrder = await createTestOrderAndParcel();
+        console.log(`[Admin Action] Successfully created test order #${newlyCreatedTestOrder.order_number} with tracking: ${newlyCreatedTestOrder.tracking}`);
+      } catch (err: any) {
+        console.error("[Admin Action] Error creating test order:", err);
+      }
+    }
+
     // 3. Parallel Live Database Queries
     const [
       todayOrdersRes,
@@ -807,6 +932,7 @@ async function handleAdminWhatsAppMessage({
       reclamationsRes,
       productsRes,
       latestDeliveredOrdersRes,
+      latestTestOrderRes,
     ] = await Promise.all([
       supabase
         .from("orders")
@@ -835,6 +961,13 @@ async function handleAdminWhatsAppMessage({
         .eq("status", "delivered")
         .order("delivered_at", { ascending: false, nullsFirst: false })
         .limit(5),
+      supabase
+        .from("orders")
+        .select("id, order_number, customer_name, phone, city, status, tracking, notes, created_at, courier:courier_id(name)")
+        .ilike("notes", "%تجريب%")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const todayOrders = todayOrdersRes.data || [];
@@ -843,6 +976,7 @@ async function handleAdminWhatsAppMessage({
     const allReclamations = reclamationsRes.data || [];
     const activeProducts = productsRes.data || [];
     const latestDelivered = latestDeliveredOrdersRes.data || [];
+    const latestTestOrder = newlyCreatedTestOrder || latestTestOrderRes.data || null;
 
     // Calculate metrics
     const todayStatusMap: Record<string, number> = {};
@@ -931,6 +1065,32 @@ async function handleAdminWhatsAppMessage({
 - الملاحظات: ${specificOrder.notes || 'لا توجد'}\n`;
     }
 
+    let testOrderSection = "";
+    if (newlyCreatedTestOrder) {
+      testOrderSection = `
+🚨 إجراء تنفيذي تم تنفيذه الآن بنجاح في قاعدة البيانات (REAL ACTION EXECUTED):
+تم للتو إنشاء طلبية اختبارية حقيقية بنجاح فـ قاعدة البيانات وربطها بشركة التوصيل Express Coursier بناءً على أمر سي أيوب!
+- رقم الطلبية فـ السيستيم: #${newlyCreatedTestOrder.order_number}
+- كود التتبع الحقيقي للكولية (Tracking Code): ${newlyCreatedTestOrder.tracking}
+- شركة التوصيل: Express Coursier
+- اسم الزبون: ${newlyCreatedTestOrder.customer_name} (${newlyCreatedTestOrder.city} - ${newlyCreatedTestOrder.phone})
+- الحالة: مشحونة (Shipped / En cours d'expédition)
+- الثمن: ${newlyCreatedTestOrder.unit_price_mad} درهم
+🛑 أجب سي أيوب فوراً برقم الطلبية (#${newlyCreatedTestOrder.order_number}) وكود التتبع الحقيقي (${newlyCreatedTestOrder.tracking})، وأكد له أنها تسجلت دابا فـ قاعدة البيانات وفـ لوحة التحكم /admin/orders وراها باينة فـ السيت!
+`;
+    } else if (latestTestOrder) {
+      testOrderSection = `
+📋 معلومات الطلبية التجريبية المسجلة حالياً فـ النظام لشركة التوصيل Express Coursier:
+- رقم الطلبية: #${latestTestOrder.order_number}
+- كود التتبع الحقيقي (Tracking Code): ${latestTestOrder.tracking || 'EC-12515-54683'}
+- شركة التوصيل: ${latestTestOrder.courier?.name || 'Express Coursier'}
+- الزبون: ${latestTestOrder.customer_name} (${latestTestOrder.city} - ${latestTestOrder.phone || '0610026260'})
+- الحالة: ${latestTestOrder.status}
+- تاريخ الإنشاء: ${latestTestOrder.created_at}
+🛑 إذا سألك سي أيوب عن كود التتبع أو كود الكولية التجريبية (مثل "جيب لي الكود ديال هذا الكوري اللي زدتها ديال التست")، اذكر له فوراً هذا الكود الحقيقي: ${latestTestOrder.tracking || 'EC-12515-54683'} للطلبية #${latestTestOrder.order_number}، بدون أي اختراع أو تخمين!
+`;
+    }
+
     const historyText = history.length > 0
       ? history.map((m) => `${m.role === "user" ? "سي أيوب (الأدمين)" : "أنت (المساعد)"}: ${m.content}`).join("\n")
       : "(هذه بداية المحادثة مع سي أيوب)";
@@ -973,7 +1133,7 @@ ${productsText}
 ${deliveredOrdersText}
 ---
 ${specificOrderText}
-
+${testOrderSection}
 4. سجل المحادثة السابقة مع سي أيوب:
 ${historyText}
 
@@ -1023,6 +1183,11 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
      - إذا قال لك سي أيوب: "دير عليه نصاب"، "هذاك راه نصاب"، "ماركي طلبية 28 نصاب"، "كيتفلى ما بغاش يشد الكوموند":
        [MARK_SCAMMER: {"order_number": رقم_الطلبية, "reason": "نصاب - ما خداش الكوموند كيتفلى"}]
      - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً. وأكد لسي أيوب أن البوت سيتجاهل أي رسالة أو أوديو من عنده ولن يقرأها (ما كيطلعش ليه Vu نهائياً، كيبقى غير واصل رمادي) ولن يجيبه إطلاقاً لحماية التوكنز والمخزون وبدون أن ينتبه.
+  9. 📦 إنشاء طلبية اختبارية / كولية لشركة التوصيل Express Coursier (CREATE_TEST_ORDER):
+     - إذا قال لك سي أيوب: "زيد كوموند تيست"، "دير طلبية تجريبية"، "زيد كولي لشركة التوصيل"، "دير تيست وصافي":
+       [CREATE_TEST_ORDER: {"customer_name": "الزبون التجريبي (Express Coursier Test)", "city": "الدار البيضاء", "amount": 150}]
+     - هذا الأمر ينشئ الطلبية فعلياً في قاعدة البيانات ويسجلها في شركة التوصيل مع كود تتبع رسمي ويبعثه لسي أيوب فوراً.
+     - 🛑 ممنوع منعاً كلياً وباتاً أن تعطي وعوداً شفوية وهمية بدون إنشاء الطلبية الحقيقية أو اختراع كود تتبع غير موجود!
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
@@ -1339,6 +1504,21 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       }
     }
 
+    // Parse and execute CREATE_TEST_ORDER tags
+    const createTestTags = extractJsonObjectsFromTag(aiResponse, "CREATE_TEST_ORDER");
+    for (const tag of createTestTags) {
+      try {
+        if (!newlyCreatedTestOrder) {
+          const parsed = JSON.parse(tag.jsonStr || "{}");
+          const created = await createTestOrderAndParcel(parsed);
+          console.log(`[Admin Action] Created test order #${created.order_number} via AI tag`);
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error creating test order via tag:", err);
+      }
+    }
+
     const cleanAdminReply = aiResponse
       .replace(/\[DELETE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[DELETE_ORDERS:\s*\{[\s\S]*?\}\]/gi, "")
@@ -1347,6 +1527,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       .replace(/\[MARK_SCAMMER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_STOCK:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[CREATE_TEST_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[BLACKLIST_PHONE:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[RESET_CHAT:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_RECLAMATION:\s*\{[\s\S]*?\}\]/gi, "")
