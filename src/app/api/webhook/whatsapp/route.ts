@@ -982,7 +982,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
   8. 🚫 وسم طلبية كـ "نصاب" وحظر الرقم تلقائياً (MARK AS SCAMMER):
      - إذا قال لك سي أيوب: "دير عليه نصاب"، "هذاك راه نصاب"، "ماركي طلبية 28 نصاب"، "كيتفلى ما بغاش يشد الكوموند":
        [MARK_SCAMMER: {"order_number": رقم_الطلبية, "reason": "نصاب - ما خداش الكوموند كيتفلى"}]
-     - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً لمنع تضييع التوكنز.
+     - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً. وأكد لسي أيوب أن البوت سيتركه على Vu (العلامات الزرقاء) ولن يجيبه إطلاقاً بعد الآن لمنع تبديله للرقم وحماية للرصيد والمخزون وبدون تضييع أي توكن.
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
@@ -1377,9 +1377,69 @@ export async function POST(req: NextRequest) {
         try {
           console.log(`[WhatsApp Webhook] Received message from ${from}: ${msg_body || `[${message.type || "unknown"} message]`}`);
 
-          // Mark as read
+          // Mark as read immediately on arrival (Vu / blue ticks)
           if (messageId) {
             markMessageAsRead(messageId).catch(() => {});
+          }
+
+          let earlyCleanPhone = (from || "").replace(/\D/g, "");
+          let earlyPhone06 = earlyCleanPhone;
+          let earlyPhone212 = earlyCleanPhone;
+          if (earlyCleanPhone.startsWith("212") && earlyCleanPhone.length === 12) {
+            earlyPhone06 = "0" + earlyCleanPhone.slice(3);
+          } else if (earlyCleanPhone.startsWith("0") && earlyCleanPhone.length === 10) {
+            earlyPhone212 = "212" + earlyCleanPhone.slice(1);
+          }
+
+          const earlyAdminClean = ADMIN_PHONE.replace(/\D/g, "");
+          const isEarlyAdmin =
+            earlyCleanPhone === "212610026260" ||
+            earlyPhone06 === "0610026260" ||
+            earlyCleanPhone === earlyAdminClean ||
+            (earlyAdminClean.startsWith("212") && earlyPhone06 === "0" + earlyAdminClean.slice(3)) ||
+            (earlyAdminClean.startsWith("0") && earlyPhone212 === "212" + earlyAdminClean.slice(1));
+
+          // 🛑 0. EARLY BLACKLIST & SCAMMER INTERCEPTION:
+          // If sender is flagged as scammer (نصاب) or blacklisted:
+          // - Leave them strictly on "VU" (blue checkmarks via Meta markMessageAsRead)
+          // - NEVER send any reply message (so they don't know they are caught and don't switch SIMs)
+          // - ZERO Gemini tokens wasted: skip audio transcription, skip vision analysis, skip LLM calls!
+          if (!isEarlyAdmin) {
+            const [blacklistRes, scammerOrderRes] = await Promise.all([
+              supabase
+                .from("blacklist")
+                .select("id, strikes, reasons")
+                .or(`phone.eq.${earlyPhone06},phone.eq.${earlyPhone212}`)
+                .maybeSingle(),
+              supabase
+                .from("orders")
+                .select("id, order_number, status, return_reason, notes")
+                .or(`phone.eq.${earlyPhone06},phone.eq.${earlyPhone212}`)
+                .or("status.eq.scammer,return_reason.eq.scammer,notes.ilike.%[SCAMMER]%")
+                .limit(1),
+            ]);
+
+            const isScammer = !!blacklistRes.data || (scammerOrderRes.data && scammerOrderRes.data.length > 0);
+
+            if (isScammer) {
+              console.log(`[WhatsApp Bot] 🔇 Scammer/Blacklisted phone (${from} / ${earlyPhone06}) detected -> Leaving strictly on VU. No reply sent. 0 AI tokens wasted.`);
+
+              // Auto-sync into blacklist table if detected via order status
+              if (!blacklistRes.data) {
+                await supabase.from("blacklist").upsert({
+                  phone: earlyPhone06,
+                  strikes: 2,
+                  reasons: ["نصاب - ما خداش الكوموند كيتفلى"]
+                }, { onConflict: "phone" });
+              }
+
+              // Ensure read receipt ("Vu") is definitely delivered to WhatsApp
+              if (messageId) {
+                await markMessageAsRead(messageId).catch(() => {});
+              }
+
+              return NextResponse.json({ status: "SCAMMER_LEFT_ON_VU" }, { status: 200 });
+            }
           }
 
           if (isAudio) {
@@ -1515,73 +1575,7 @@ export async function POST(req: NextRequest) {
               });
             }
 
-            // 🛑 4.1. CHECK BLACKLIST / SCAMMER DETECTION BEFORE ANY AI / GEMINI CALL:
-            const [blacklistRes, scammerOrderRes] = await Promise.all([
-              supabase
-                .from("blacklist")
-                .select("id, strikes, reasons")
-                .or(`phone.eq.${phone06},phone.eq.${phone212}`)
-                .maybeSingle(),
-              supabase
-                .from("orders")
-                .select("id, order_number, status, return_reason, notes")
-                .or(`phone.eq.${phone06},phone.eq.${phone212}`)
-                .or("status.eq.scammer,return_reason.eq.scammer,notes.ilike.%[SCAMMER]%")
-                .limit(1),
-            ]);
 
-            const isBlacklisted = !!blacklistRes.data || (scammerOrderRes.data && scammerOrderRes.data.length > 0);
-
-            if (isBlacklisted) {
-              console.log(`[WhatsApp Bot] 🚫 BLOCKED/SCAMMER PHONE DETECTED: ${from} (phone: ${phone06})`);
-
-              // Auto-sync into blacklist table if detected via order status
-              if (!blacklistRes.data) {
-                await supabase.from("blacklist").upsert({
-                  phone: phone06,
-                  strikes: 2,
-                  reasons: ["نصاب - ما خداش الكوموند كيتفلى"]
-                }, { onConflict: "phone" });
-              }
-
-              // Check if scammer has already been notified once
-              const { data: sessionRow } = sessionId 
-                ? await supabase.from("chat_sessions").select("status").eq("id", sessionId).maybeSingle()
-                : { data: null };
-
-              let alreadyNotified = sessionRow?.status === "blacklisted_notified";
-              if (!alreadyNotified && sessionId) {
-                const { data: pastNotices } = await supabase
-                  .from("chat_messages")
-                  .select("id")
-                  .eq("session_id", sessionId)
-                  .eq("role", "assistant")
-                  .ilike("content", "%اللائحة السوداء%")
-                  .limit(1);
-                if (pastNotices && pastNotices.length > 0) {
-                  alreadyNotified = true;
-                  await supabase.from("chat_sessions").update({ status: "blacklisted_notified" }).eq("id", sessionId);
-                }
-              }
-
-              if (alreadyNotified) {
-                // Audio 2 rule:
-                // "يجاوبو مرة وحدة ما يبقاش كل مرة يجاوب يضيع ليا فـ التوكنز... صافي ما يبقاش يجاوبو... يولي يطلع ليه Vu وما يبقاش يجاوبو"
-                console.log(`[WhatsApp Bot] 🔇 Scammer ${phone06} has already been notified once. Dropping silently to save AI tokens.`);
-                return NextResponse.json({ status: "SCAMMER_DROPPED_SILENT" }, { status: 200 });
-              }
-
-              // First-time polite notice (بالتي هي أحسن - Audio 1 rule):
-              const scammerNotice = "السلام عليكم أخي الكريم 🙏\nنعتذر منك، رقم هاتفك مسجل في اللائحة السوداء للمتجر لعدم استلامك لطلبيات سابقة تم شحنها إليك.\nلا يمكننا قبول أو معالجة أي طلب جديد من هذا الرقم، وشكراً لتفهمك.";
-              
-              await sendWhatsAppMessage(from, scammerNotice);
-              if (sessionId) {
-                await saveChatMessage(sessionId, "assistant", scammerNotice);
-                await supabase.from("chat_sessions").update({ status: "blacklisted_notified" }).eq("id", sessionId);
-              }
-
-              return NextResponse.json({ status: "SCAMMER_NOTIFIED_FIRST_TIME" }, { status: 200 });
-            }
 
             const [botSettingsRes, productsRes, previousOrdersRes] = await Promise.all([
               supabase.from("bot_settings").select("*").limit(1).single(),
