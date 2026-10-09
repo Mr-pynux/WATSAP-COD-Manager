@@ -74,7 +74,7 @@ ${prodsText}
 أجب بالدارجة المغربية بأسلوب تنفيذي لسي أيوب.`;
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
   const result = await model.generateContent(prompt);
   console.log("AI Response:\n", result.response.text());
 }

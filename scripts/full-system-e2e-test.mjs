@@ -85,13 +85,13 @@ async function runAllTests() {
     recordResult("Meta WhatsApp Cloud API", false, e.message);
   }
 
-  // TEST 3: Audio Transcription with Gemini (gemini-3.5-flash first with fallback)
+  // TEST 3: Audio Transcription with Gemini (gemini-3.8-flash with gemini-3.6-flash fallback)
   console.log("\n--- 3. Testing Audio Transcription (Voice Note -> Text) ---");
   const audioFilePath = "C:/Users/ayoub/.gemini/antigravity-ide/brain/f3574c70-be52-461a-8546-3c4cd9a1f4ea/.tempmediaStorage/media_1791304629712.webm";
   try {
     if (fs.existsSync(audioFilePath)) {
       const base64Audio = fs.readFileSync(audioFilePath).toString("base64");
-      const modelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
       let transcribed = "";
 
       for (const mName of modelsToTry) {
@@ -233,7 +233,7 @@ async function runAllTests() {
 معطيات حية: آخر الطلبيات: ${ordsText}.
 سؤال سي أيوب: "${adminQuery}"`;
 
-    const modelsToTry = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+    const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
     let reply = "";
     for (const mName of modelsToTry) {
       try {

@@ -222,8 +222,8 @@ async function transcribeAudioWithGemini(
   mimeType: string,
   apiKey: string
 ): Promise<string | null> {
-  // Use gemini-3.8-flash first for high speed, reliability, and accuracy in Darija transcription
-  const modelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
+  // Use gemini-3.8-flash first for high speed, reliability, and accuracy in Darija transcription, with gemini-3.6-flash and gemini-3.7-flash as fallbacks
+  const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
 
   for (const modelName of modelsToTry) {
     try {
@@ -1374,7 +1374,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let aiResponse = "";
-    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
+    const adminModelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
     for (const mName of adminModelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: mName });
@@ -2332,7 +2332,7 @@ ${userPromptText}
 
             const apiKey = process.env.AI_API_KEY?.trim() || "";
             const genAI = new GoogleGenerativeAI(apiKey);
-            const customerModelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
+            const customerModelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash"];
 
             let aiResponse = "";
             for (const cmName of customerModelsToTry) {
