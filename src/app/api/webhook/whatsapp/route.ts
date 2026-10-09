@@ -968,7 +968,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
      - 🛑 ممنوع منعاً كلياً وباتاً أن تقول لسي أيوب "سير محيهم لراسك من السيت / البيسي" أو "ما عنديش صلاحية"! أنت تملك الصلاحية الكاملة وتنفذ الحذف من قاعدة البيانات فوراً، وتؤكد له الحذف بنجاح: "على الراس والعين سي أيوب، تم مسح الطلبيات نهائياً من قاعدة البيانات وما بقاوش كيبانو فـ السيت بمرة ✅".
   2. تغيير حالة أو إلغاء/تأكيد أي طلبية:
      [UPDATE_ORDER_STATUS: {"order_number": رقم_الطلبية, "status": "الحالة_الجديدة", "note": "تعديل عبر واتساب بواسطة سي أيوب"}]
-     الحالات: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned)
+     الحالات: (new, confirmed, confirmed_continuous, no_answer, retry, postponed, canceled, shipped, delivered, returned, scammer)
   3. تعديل معلومات طلبية (مدينة، اسم، هاتف، ملاحظة):
      [UPDATE_ORDER: {"order_number": رقم_الطلبية, "city": "المدينة", "notes": "ملاحظة"}]
   4. تعديل السطوك والمخزون لأي نمرة وموديل:
@@ -979,6 +979,10 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
      [BLACKLIST_PHONE: {"phone": "رقم_الهاتف", "reason": "السبب"}]
   7. تصفير أو إعادة ضبط محادثة زبون:
      [RESET_CHAT: {"phone": "رقم_الهاتف"}]
+  8. 🚫 وسم طلبية كـ "نصاب" وحظر الرقم تلقائياً (MARK AS SCAMMER):
+     - إذا قال لك سي أيوب: "دير عليه نصاب"، "هذاك راه نصاب"، "ماركي طلبية 28 نصاب"، "كيتفلى ما بغاش يشد الكوموند":
+       [MARK_SCAMMER: {"order_number": رقم_الطلبية, "reason": "نصاب - ما خداش الكوموند كيتفلى"}]
+     - هذا الأمر يحول الطلبية إلى حالة "نصاب" ويضيف رقم الزبون فوراً إلى اللائحة السوداء ويحظره نهائياً لمنع تضييع التوكنز.
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 
@@ -1070,13 +1074,35 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
             .maybeSingle();
 
           if (ord) {
-            const updates: any = { status: newStatus };
-            if (newStatus === "confirmed" || newStatus === "confirmed_continuous") updates.confirmed_at = new Date().toISOString();
-            if (newStatus === "shipped") updates.shipped_at = new Date().toISOString();
-            if (newStatus === "delivered") updates.delivered_at = new Date().toISOString();
-            if (parsed.note) updates.notes = parsed.note;
+            if (newStatus === "scammer") {
+              const { error: errScam } = await supabase.from("orders").update({ status: "scammer" }).eq("id", ord.id);
+              if (errScam) {
+                await supabase.from("orders").update({
+                  status: "canceled",
+                  return_reason: "scammer",
+                  notes: `[SCAMMER: نصاب] ${parsed.note || "ما خداش الكوموند كيتفلى"}`.trim(),
+                }).eq("id", ord.id);
+              }
+              const { data: oRow } = await supabase.from("orders").select("phone").eq("id", ord.id).maybeSingle();
+              if (oRow?.phone) {
+                let p = oRow.phone.replace(/\D/g, "");
+                if (p.startsWith("212") && p.length === 12) p = "0" + p.slice(3);
+                await supabase.from("blacklist").upsert({
+                  phone: p,
+                  strikes: 2,
+                  reasons: [`نصاب - ما خداش الكوموند كيتفلى (طلب #${orderNum})`],
+                }, { onConflict: "phone" });
+              }
+            } else {
+              const updates: any = { status: newStatus };
+              if (newStatus === "confirmed" || newStatus === "confirmed_continuous") updates.confirmed_at = new Date().toISOString();
+              if (newStatus === "shipped") updates.shipped_at = new Date().toISOString();
+              if (newStatus === "delivered") updates.delivered_at = new Date().toISOString();
+              if (parsed.note) updates.notes = parsed.note;
 
-            await supabase.from("orders").update(updates).eq("id", ord.id);
+              await supabase.from("orders").update(updates).eq("id", ord.id);
+            }
+
             await supabase.from("order_events").insert({
               order_id: ord.id,
               type: "status_change",
@@ -1094,6 +1120,67 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
         aiResponse = aiResponse.replace(tag.fullTag, "");
       } catch (err) {
         console.error("Error updating order status from admin tag:", err);
+      }
+    }
+
+    // Parse and execute MARK_SCAMMER tags
+    const scammerTags = extractJsonObjectsFromTag(aiResponse, "MARK_SCAMMER");
+    for (const tag of scammerTags) {
+      try {
+        const parsed = JSON.parse(tag.jsonStr);
+        const orderNum = parseInt(parsed.order_number, 10);
+        const reason = parsed.reason || "نصاب - ما خداش الكوموند كيتفلى";
+        if (!isNaN(orderNum)) {
+          const { data: ord } = await supabase
+            .from("orders")
+            .select("id, phone, customer_name, order_number")
+            .eq("order_number", orderNum)
+            .maybeSingle();
+
+          if (ord) {
+            const { error: errScam } = await supabase.from("orders").update({ status: "scammer" }).eq("id", ord.id);
+            if (errScam) {
+              await supabase.from("orders").update({
+                status: "canceled",
+                return_reason: "scammer",
+                notes: `[SCAMMER: نصاب] ${reason}`.trim(),
+              }).eq("id", ord.id);
+            }
+            if (ord.phone) {
+              let p = ord.phone.replace(/\D/g, "");
+              if (p.startsWith("212") && p.length === 12) p = "0" + p.slice(3);
+              const fullReason = `${reason} (طلب #${ord.order_number})`;
+              const { data: existing } = await supabase.from("blacklist").select("id, strikes, reasons").eq("phone", p).maybeSingle();
+              if (existing) {
+                await supabase.from("blacklist").update({
+                  strikes: (existing.strikes || 1) + 2,
+                  reasons: [...(existing.reasons || []), fullReason],
+                }).eq("id", existing.id);
+              } else {
+                await supabase.from("blacklist").insert({
+                  phone: p,
+                  strikes: 2,
+                  reasons: [fullReason],
+                });
+              }
+            }
+            await supabase.from("order_events").insert({
+              order_id: ord.id,
+              type: "status_change",
+              detail: {
+                old_status: "unknown",
+                new_status: "scammer",
+                source: "admin_whatsapp",
+                by: "Ayoub",
+                reason,
+              },
+            });
+            console.log(`[Admin Action] Marked order #${orderNum} as SCAMMER and blacklisted`);
+          }
+        }
+        aiResponse = aiResponse.replace(tag.fullTag, "");
+      } catch (err) {
+        console.error("Error marking scammer:", err);
       }
     }
 
@@ -1217,6 +1304,7 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       .replace(/\[DELETE_ORDERS:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[DELETE_ALL_TEST_ORDERS:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_ORDER_STATUS:\s*\{[\s\S]*?\}\]/gi, "")
+      .replace(/\[MARK_SCAMMER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_ORDER:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[UPDATE_STOCK:\s*\{[\s\S]*?\}\]/gi, "")
       .replace(/\[BLACKLIST_PHONE:\s*\{[\s\S]*?\}\]/gi, "")
@@ -1425,6 +1513,74 @@ export async function POST(req: NextRequest) {
                 sessionId,
                 history,
               });
+            }
+
+            // 🛑 4.1. CHECK BLACKLIST / SCAMMER DETECTION BEFORE ANY AI / GEMINI CALL:
+            const [blacklistRes, scammerOrderRes] = await Promise.all([
+              supabase
+                .from("blacklist")
+                .select("id, strikes, reasons")
+                .or(`phone.eq.${phone06},phone.eq.${phone212}`)
+                .maybeSingle(),
+              supabase
+                .from("orders")
+                .select("id, order_number, status, return_reason, notes")
+                .or(`phone.eq.${phone06},phone.eq.${phone212}`)
+                .or("status.eq.scammer,return_reason.eq.scammer,notes.ilike.%[SCAMMER]%")
+                .limit(1),
+            ]);
+
+            const isBlacklisted = !!blacklistRes.data || (scammerOrderRes.data && scammerOrderRes.data.length > 0);
+
+            if (isBlacklisted) {
+              console.log(`[WhatsApp Bot] 🚫 BLOCKED/SCAMMER PHONE DETECTED: ${from} (phone: ${phone06})`);
+
+              // Auto-sync into blacklist table if detected via order status
+              if (!blacklistRes.data) {
+                await supabase.from("blacklist").upsert({
+                  phone: phone06,
+                  strikes: 2,
+                  reasons: ["نصاب - ما خداش الكوموند كيتفلى"]
+                }, { onConflict: "phone" });
+              }
+
+              // Check if scammer has already been notified once
+              const { data: sessionRow } = sessionId 
+                ? await supabase.from("chat_sessions").select("status").eq("id", sessionId).maybeSingle()
+                : { data: null };
+
+              let alreadyNotified = sessionRow?.status === "blacklisted_notified";
+              if (!alreadyNotified && sessionId) {
+                const { data: pastNotices } = await supabase
+                  .from("chat_messages")
+                  .select("id")
+                  .eq("session_id", sessionId)
+                  .eq("role", "assistant")
+                  .ilike("content", "%اللائحة السوداء%")
+                  .limit(1);
+                if (pastNotices && pastNotices.length > 0) {
+                  alreadyNotified = true;
+                  await supabase.from("chat_sessions").update({ status: "blacklisted_notified" }).eq("id", sessionId);
+                }
+              }
+
+              if (alreadyNotified) {
+                // Audio 2 rule:
+                // "يجاوبو مرة وحدة ما يبقاش كل مرة يجاوب يضيع ليا فـ التوكنز... صافي ما يبقاش يجاوبو... يولي يطلع ليه Vu وما يبقاش يجاوبو"
+                console.log(`[WhatsApp Bot] 🔇 Scammer ${phone06} has already been notified once. Dropping silently to save AI tokens.`);
+                return NextResponse.json({ status: "SCAMMER_DROPPED_SILENT" }, { status: 200 });
+              }
+
+              // First-time polite notice (بالتي هي أحسن - Audio 1 rule):
+              const scammerNotice = "السلام عليكم أخي الكريم 🙏\nنعتذر منك، رقم هاتفك مسجل في اللائحة السوداء للمتجر لعدم استلامك لطلبيات سابقة تم شحنها إليك.\nلا يمكننا قبول أو معالجة أي طلب جديد من هذا الرقم، وشكراً لتفهمك.";
+              
+              await sendWhatsAppMessage(from, scammerNotice);
+              if (sessionId) {
+                await saveChatMessage(sessionId, "assistant", scammerNotice);
+                await supabase.from("chat_sessions").update({ status: "blacklisted_notified" }).eq("id", sessionId);
+              }
+
+              return NextResponse.json({ status: "SCAMMER_NOTIFIED_FIRST_TIME" }, { status: 200 });
             }
 
             const [botSettingsRes, productsRes, previousOrdersRes] = await Promise.all([

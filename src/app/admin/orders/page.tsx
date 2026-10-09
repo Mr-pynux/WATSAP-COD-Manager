@@ -256,6 +256,64 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-4">
+      {/* ── Quick Status Filter Pills ────────────────── */}
+      <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
+        <Button
+          variant={filters.status === "all" ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs font-semibold"
+          onClick={() => setFilter("status", "all")}
+        >
+          الكل
+        </Button>
+        <Button
+          variant={filters.status === "confirmed_continuous" ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs font-semibold bg-teal-600/10 text-teal-700 dark:text-teal-300 border-teal-600/30 hover:bg-teal-600/20"
+          onClick={() => setFilter("status", "confirmed_continuous")}
+        >
+          مؤكدة مستمرة
+        </Button>
+        <Button
+          variant={filters.status === "shipped" ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs font-semibold"
+          onClick={() => setFilter("status", "shipped")}
+        >
+          مرسل (فالطريق)
+        </Button>
+        <Button
+          variant={filters.status === "delivered" ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs font-semibold"
+          onClick={() => setFilter("status", "delivered")}
+        >
+          تم التوصيل
+        </Button>
+        <Button
+          variant={filters.status === "returned" ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs font-semibold"
+          onClick={() => setFilter("status", "returned")}
+        >
+          الروتور (مرجع)
+        </Button>
+        <Button
+          variant={filters.status === "scammer" ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-8 text-xs font-bold gap-1.5 transition-all",
+            filters.status === "scammer"
+              ? "bg-purple-700 text-white shadow-md shadow-purple-500/20 border-purple-600"
+              : "bg-purple-950/20 text-purple-400 border-purple-500/40 hover:bg-purple-950/40"
+          )}
+          onClick={() => setFilter("status", "scammer")}
+        >
+          <span>🚫</span>
+          <span>النصابة</span>
+        </Button>
+      </div>
+
       {/* ── Filters bar ─────────────────────────────── */}
       <Card>
         <CardContent className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">

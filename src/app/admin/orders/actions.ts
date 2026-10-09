@@ -32,7 +32,11 @@ export async function getOrdersServer(
     .order("created_at", { ascending: false });
 
   if (filters.status && filters.status !== "all") {
-    query = query.eq("status", filters.status);
+    if (filters.status === "scammer") {
+      query = query.or("status.eq.scammer,return_reason.eq.scammer,notes.ilike.%[SCAMMER]%");
+    } else {
+      query = query.eq("status", filters.status);
+    }
   }
   if (filters.city && filters.city !== "all") {
     query = query.eq("city", filters.city);
@@ -139,7 +143,7 @@ export async function getOrdersServer(
       unitPriceMad: row.unit_price_mad,
       discountMad: 0,
       totalMad: (row.unit_price_mad * row.quantity),
-      status: row.status,
+      status: (row.status === 'scammer' || row.return_reason === 'scammer' || (typeof row.notes === 'string' && row.notes.includes('[SCAMMER]'))) ? 'scammer' : row.status,
       attempts: row.attempts,
       lastAttemptAt: row.last_attempt_at,
       shipDate: row.ship_date,
@@ -201,9 +205,42 @@ export async function getBlacklistServer(): Promise<{ entries: BlacklistEntryDTO
   return { entries };
 }
 
+async function addOrderPhoneToBlacklist(supabase: any, orderId: string, reason = "نصاب - ما خداش الكوموند كيتفلى") {
+  try {
+    const { data: ord } = await supabase.from("orders").select("phone, customer_name, order_number").eq("id", orderId).maybeSingle();
+    if (ord?.phone) {
+      const clean = ord.phone.replace(/\D/g, "");
+      const phone06 = clean.startsWith("212") ? "0" + clean.slice(3) : clean;
+      const fullReason = `${reason} (طلب #${ord.order_number})`;
+      
+      const { data: existing } = await supabase.from("blacklist").select("id, strikes, reasons").eq("phone", phone06).maybeSingle();
+      if (existing) {
+        const reasons = [...(existing.reasons || []), fullReason];
+        await supabase.from("blacklist").update({
+          strikes: (existing.strikes || 1) + 2,
+          reasons,
+        }).eq("id", existing.id);
+      } else {
+        await supabase.from("blacklist").insert({
+          phone: phone06,
+          strikes: 2,
+          reasons: [fullReason],
+        });
+      }
+      console.log(`[Blacklist Auto] Added scammer phone ${phone06} for order #${ord.order_number}`);
+    }
+  } catch (err) {
+    console.error("Error auto-adding to blacklist:", err);
+  }
+}
+
 export async function updateOrderStatusServer(id: string, status: string) {
   const supabase = await verifyAdmin();
   
+  if (status === 'scammer') {
+    await addOrderPhoneToBlacklist(supabase, id, "نصاب - ما خداش الكوموند كيتفلى");
+  }
+
   let updates: any = { status };
   
   if (status === 'confirmed' || status === 'confirmed_continuous') updates.confirmed_at = new Date().toISOString();
@@ -211,7 +248,19 @@ export async function updateOrderStatusServer(id: string, status: string) {
   if (status === 'delivered') updates.delivered_at = new Date().toISOString();
   
   const { error } = await supabase.from("orders").update(updates).eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (status === 'scammer') {
+      // Graceful fallback if orders_status_check DDL constraint is not yet updated
+      const { error: fallbackErr } = await supabase.from("orders").update({
+        status: 'canceled',
+        return_reason: 'scammer',
+        notes: `[SCAMMER: نصاب]`.trim(),
+      }).eq("id", id);
+      if (fallbackErr) throw new Error(fallbackErr.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
 
   await supabase.from("order_events").insert({
     order_id: id,
@@ -225,6 +274,10 @@ export async function updateOrderStatusServer(id: string, status: string) {
 export async function updateOrderDetailsServer(id: string, body: Record<string, any>) {
   const supabase = await verifyAdmin();
   
+  if (body.status === 'scammer') {
+    await addOrderPhoneToBlacklist(supabase, id, "نصاب - ما خداش الكوموند كيتفلى");
+  }
+
   const updateData: Record<string, any> = {
     courier_id: body.courierId,
     tracking: body.tracking,
@@ -243,8 +296,17 @@ export async function updateOrderDetailsServer(id: string, body: Record<string, 
   }
 
   const { error } = await supabase.from("orders").update(updateData).eq("id", id);
-  
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (body.status === 'scammer') {
+      updateData.status = 'canceled';
+      updateData.return_reason = 'scammer';
+      updateData.notes = `[SCAMMER: نصاب] ${body.notes || ''}`.trim();
+      const { error: fallbackErr } = await supabase.from("orders").update(updateData).eq("id", id);
+      if (fallbackErr) throw new Error(fallbackErr.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
   
   // if status was changed
   if (body.status) {
@@ -327,8 +389,25 @@ export async function exportOrdersCSVServer(ids?: string[], filters?: any) {
 export async function bulkUpdateStatusServer(ids: string[], status: string) {
   const supabase = await verifyAdmin();
   
+  if (status === 'scammer') {
+    for (const id of ids) {
+      await addOrderPhoneToBlacklist(supabase, id, "نصاب - ما خداش الكوموند كيتفلى");
+    }
+  }
+
   const { error } = await supabase.from("orders").update({ status }).in("id", ids);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (status === 'scammer') {
+      const { error: fallbackErr } = await supabase.from("orders").update({
+        status: 'canceled',
+        return_reason: 'scammer',
+        notes: `[SCAMMER: نصاب]`.trim(),
+      }).in("id", ids);
+      if (fallbackErr) throw new Error(fallbackErr.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
 
   const events = ids.map(id => ({
     order_id: id,
@@ -602,7 +681,7 @@ export async function getOrderByIdServer(id: string): Promise<OrderDTO | null> {
     unitPriceMad: row.unit_price_mad,
     discountMad: 0,
     totalMad: (row.unit_price_mad * row.quantity),
-    status: row.status,
+    status: (row.status === 'scammer' || row.return_reason === 'scammer' || (typeof row.notes === 'string' && row.notes.includes('[SCAMMER]'))) ? 'scammer' : row.status,
     attempts: row.attempts,
     lastAttemptAt: row.last_attempt_at,
     shipDate: row.ship_date,

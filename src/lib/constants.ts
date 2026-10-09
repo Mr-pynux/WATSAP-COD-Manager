@@ -11,6 +11,7 @@ export const ORDER_STATUSES = [
   "shipped",
   "delivered",
   "returned",
+  "scammer",
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -26,6 +27,7 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   shipped: "مرسل",
   delivered: "تم التوصيل",
   returned: "مرجع",
+  scammer: "نصاب",
 };
 
 export const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
@@ -39,6 +41,7 @@ export const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   shipped: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30",
   delivered: "bg-green-600/15 text-green-700 dark:text-green-300 border-green-600/30",
   returned: "bg-rose-600/15 text-rose-700 dark:text-rose-300 border-rose-600/30",
+  scammer: "bg-purple-950/40 text-purple-300 border-purple-500/60 font-bold",
 };
 
 export const RETURN_REASONS = ["size", "quality", "changed_mind", "no_show"] as const;
