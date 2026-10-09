@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getWhatsAppUsageAndCosts, type WhatsAppUsageAndCost } from "@/lib/whatsapp-cost";
+export type { WhatsAppUsageAndCost };
 
 // Verify admin access
 async function verifyAdmin() {

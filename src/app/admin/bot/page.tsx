@@ -347,13 +347,21 @@ export default function BotSettingsPage() {
                 {/* Progress bar */}
                 <div className="w-full bg-muted rounded-full h-2 overflow-hidden mt-1">
                   <div
-                    className="bg-sky-500 h-full rounded-full transition-all"
+                    className={`h-full rounded-full transition-all ${
+                      analytics.whatsappUsage.freeTier.used >= 900
+                        ? "bg-amber-500"
+                        : "bg-sky-500"
+                    }`}
                     style={{ width: `${Math.min(100, analytics.whatsappUsage.freeTier.percent)}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  ميتا تمنح 1,000 محادثة خدمة مجانية كل شهر (0.00 درهم)
-                </p>
+                <div className="pt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted-foreground">
+                  <span>ميتا: 1,000 محادثة خدمة مجانية/شهر (0.00 د.م)</span>
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-medium flex items-center gap-1">
+                    <span>🔔</span>
+                    <span>تنبيه واتساب مفعل عند 900 (90%)</span>
+                  </Badge>
+                </div>
               </div>
 
               {/* Meta Account Rating & Limits */}

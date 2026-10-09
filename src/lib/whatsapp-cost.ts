@@ -207,6 +207,13 @@ export async function getWhatsAppUsageAndCosts(forceRefresh = false): Promise<Wh
 
     cachedData = result;
     lastFetchTimestamp = now;
+
+    if (result.freeTier.used >= FREE_TIER_WARNING_THRESHOLD) {
+      checkAndTriggerFreeTierAlert(FREE_TIER_WARNING_THRESHOLD).catch((e) =>
+        console.error("[WhatsApp Cost] Free tier alert check error:", e)
+      );
+    }
+
     return result;
   } catch (err: any) {
     console.error("[WhatsApp Cost Sync Error]:", err);
@@ -246,4 +253,112 @@ export async function getWhatsAppCostSummaryText(): Promise<string> {
     `🟢 *حالة الحساب فـ Meta:* ${data.phone.qualityRating === "GREEN" ? "ممتازة (GREEN 🟢)" : data.phone.qualityRating} بسقف ${data.phone.messagingLimitTier} محادثة/اليوم.\n` +
     `الأمور مضبوطة ومحمية من أي مصاريف زايدة أ سي أيوب! 👏`
   );
+}
+
+/**
+ * Official warning threshold requested by Si Ayoub (900 out of 1000 free messages).
+ */
+export const FREE_TIER_WARNING_THRESHOLD = 900;
+
+/**
+ * Checks if the monthly free tier usage has reached or exceeded 900 messages.
+ * Automatically dispatches an alert WhatsApp message to Si Ayoub (Admin) if not already sent this month.
+ */
+export async function checkAndTriggerFreeTierAlert(
+  customThreshold = FREE_TIER_WARNING_THRESHOLD,
+  forceSend = false
+): Promise<{ alerted: boolean; used: number; reason?: string }> {
+  try {
+    const data = await getWhatsAppUsageAndCosts();
+    const used = data.freeTier.used;
+
+    // Check threshold unless forced
+    if (!forceSend && used < customThreshold) {
+      return { alerted: false, used, reason: `Usage (${used}) is below threshold (${customThreshold})` };
+    }
+
+    const adminPhone = (process.env.ADMIN_WHATSAPP_PHONE || "212610026260").replace(/\D/g, "");
+    if (!adminPhone) {
+      return { alerted: false, used, reason: "No ADMIN_WHATSAPP_PHONE configured" };
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).toISOString();
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+    if (!supabaseUrl || !serviceKey) {
+      return { alerted: false, used, reason: "Supabase credentials missing" };
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Unless forced, verify if alert has already been sent this calendar month
+    if (!forceSend) {
+      const { data: existingAlerts } = await supabase
+        .from("chat_messages")
+        .select("id")
+        .ilike("content", "%تنبيه استهلاك واتساب: اقتراب نفاد الرسائل المجانية%")
+        .gte("created_at", startOfMonth)
+        .limit(1);
+
+      if (existingAlerts && existingAlerts.length > 0) {
+        return { alerted: false, used, reason: "Alert already dispatched for this month" };
+      }
+    }
+
+    const alertMessage =
+      `⚠️ *[تنبيه استهلاك واتساب: اقتراب نفاد الرسائل المجانية]* ⚠️\n\n` +
+      `أهلاً أ سي أيوب 👋\n` +
+      `هذا تنبيه أوتوماتيكي من البوت: عدد الرسائل المجانية (Free Tier من Meta) وصل لـ *${used}* من أصل *1,000* رسالة هاد الشهر (${data.freeTier.percent}%).\n\n` +
+      `🎁 *المتبقي فابور:* *${data.freeTier.remaining}* رسالة فقط (0.00 درهم).\n` +
+      `💳 *تنبيه الخلاص:* بمجرد ما تفوت 1,000 رسالة، المحادثات الجديدة غتبدا تحسب بـ ~0.24 درهم (24 سنتيم) للمحادثة.\n\n` +
+      `📌 *شنو خاصك دير:* إذا كنتي غادي تطلق إعلانات وضغط الكليان غايتزاد، تأكد بلي الكارط فيزا (Carte Bancaire) مسجلة فـ WhatsApp Manager باش ما يحبسش ليك البوت الإرسال ملي تفوت 1,000.\n\n` +
+      `📊 تقدر تراقب التفاصيل فـ أي وقت من الداشبورد أو سوني هنا وغنجاوبك! 👍`;
+
+    const { sendDirectWhatsAppMessage } = await import("./whatsapp");
+    const sendResult = await sendDirectWhatsAppMessage(adminPhone, alertMessage);
+
+    if (sendResult.error) {
+      console.error("[WhatsApp Cost Alert] Failed to send alert message:", sendResult.error);
+      return { alerted: false, used, reason: String(sendResult.error) };
+    }
+
+    // Record in chat_messages to prevent duplicate alerts
+    let sessionId: string | null = null;
+    const { data: session } = await supabase
+      .from("chat_sessions")
+      .select("id")
+      .eq("phone", adminPhone)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (session) {
+      sessionId = session.id;
+    } else {
+      const { data: newSession } = await supabase
+        .from("chat_sessions")
+        .insert({ phone: adminPhone, status: "active" })
+        .select("id")
+        .single();
+      if (newSession) sessionId = newSession.id;
+    }
+
+    if (sessionId) {
+      await supabase.from("chat_messages").insert({
+        session_id: sessionId,
+        role: "assistant",
+        content: alertMessage,
+      });
+    }
+
+    console.log(`[WhatsApp Cost Alert] ✅ Successfully dispatched free tier threshold alert to ${adminPhone}`);
+    return { alerted: true, used };
+  } catch (err: any) {
+    console.error("[WhatsApp Cost Alert Error]:", err);
+    return { alerted: false, used: 0, reason: err.message };
+  }
 }
