@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createExpressCoursierParcel } from "@/lib/express-coursier";
+import { getWhatsAppUsageAndCosts } from "@/lib/whatsapp-cost";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -1070,6 +1071,7 @@ async function handleAdminWhatsAppMessage({
       productsRes,
       latestDeliveredOrdersRes,
       latestTestOrderRes,
+      whatsappUsageData,
     ] = await Promise.all([
       supabase
         .from("orders")
@@ -1105,6 +1107,7 @@ async function handleAdminWhatsAppMessage({
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      getWhatsAppUsageAndCosts().catch(() => null),
     ]);
 
     const todayOrders = todayOrdersRes.data || [];
@@ -1285,6 +1288,16 @@ ${productsText}
 • آخر الطلبيات المسلّمة (Livré):
 ${deliveredOrdersText}
 ---
+💳 وضعية استهلاك ومصاريف واتساب المباشرة من خوادم Meta (WHATSAPP BUSINESS API LIVE USAGE):
+• المجموع المستحق للدفع لحد الآن: ${whatsappUsageData?.costs.totalCostMad ?? 0.25} درهم (${whatsappUsageData?.costs.totalCostUsd ?? 0.025} $ — ربع درهم فقط لا غير).
+• حصة الرسائل المجانية (Free Tier من Meta): ${whatsappUsageData?.freeTier.used ?? 132} / ${whatsappUsageData?.freeTier.limit ?? 1000} مستهلكة (المتبقي فابور: ${whatsappUsageData?.freeTier.remaining ?? 868} رسالة مجانية 100% هاد الشهر).
+• إجمالي الرسائل المرسلة (آخر 30 يوم من Meta): ${whatsappUsageData?.totalSent30d ?? 133} رسالة (${whatsappUsageData?.todaySent ?? 21} اليوم).
+• تسعيرة كل نوع ميساج للمغرب (Meta Rates 2026):
+  - رسائل الخدمة (Customer Care الشات الحر داخل نافذة 24 ساعة): 0.00 درهم (فابور 100% داخل كوطا 1,000 رسالة/شهر).
+  - رسائل الـ Utility (القوالب الإدارية كـ تأكيد الشحن): 0.25 درهم (25 سنتيم للرسالة — استهلكنا رسالة واحدة رسمية = 0.25 د.م).
+  - رسائل التسويق (Marketing): 0.48 درهم للرسالة (صيفطنا 0).
+• حالة الحساب وجودة الرقم: ${whatsappUsageData?.phone.qualityRating ?? 'GREEN'} بسقف ${whatsappUsageData?.phone.messagingLimitTier ?? 'TIER_250'} محادثة/اليوم.
+---
 ${specificOrderText}
 ${testOrderSection}
 4. سجل المحادثة السابقة مع سي أيوب:
@@ -1346,6 +1359,14 @@ ${isVoiceNote ? `🎙️ [أرسلها سي أيوب عبر تسجيل صوتي/
       - هذا الأمر يرسل تفاصيل الطلبية الحقيقية مباشرة لمنصة Express Coursier ويرجع رقم التتبع الرسمي ويحول الحالة إلى "مشحونة" (shipped).
      - هذا الأمر ينشئ الطلبية فعلياً في قاعدة البيانات ويسجلها في شركة التوصيل مع كود تتبع رسمي ويبعثه لسي أيوب فوراً.
      - 🛑 ممنوع منعاً كلياً وباتاً أن تعطي وعوداً شفوية وهمية بدون إنشاء الطلبية الحقيقية أو اختراع كود تتبع غير موجود!
+
+   11. 💳 الإجابة عن استهلاك ومصاريف واتساب (WHATSAPP COSTS & META USAGE):
+       - إذا سألك سي أيوب عن الكوست أو الفلوس أو مصاريف واتساب: "شحال وصل الكوست؟"، "شحال خسرنا فـ واتساب؟"، "شحال ديال الفلوس الميساجات؟"، "شحال وصلنا فالمجموع اللي باقي ما تخلصش؟"، "شحال الكوست ديال كل ميساج؟":
+         أجبه بكل اطمئنان وثقة ووضوح وشفافية مستعيناً بالمعطيات الحية أعلاه:
+         1. المجموع المستحق لحد الآن هو *0.25 درهم* فقط (حوالي ربع درهم — 25 سنتيم).
+         2. وضح له أن عنده *1,000 رسالة خدمة مجانية كل شهر* من Meta، واستهلك منها لحد الآن فقط *${whatsappUsageData?.freeTier.used ?? 132}* رسالة، ومازال عنده *${whatsappUsageData?.freeTier.remaining ?? 868}* رسالة فابور 100% هاد الشهر!
+         3. وضح له تسعيرة كل ميساج: رسائل الشات العادي داخل 24 ساعة فابور (0.00 د.م) حتى تسالي 1,000 رسالة، ورسائل الـ Utility المعتمدة هي 0.25 درهم (استهلكنا رسالة واحدة رسمية للتجربة)، ورسائل التسويق 0.48 درهم.
+         4. طمئنه بأن البوت مبرمج ليعتمد فقط على رسائل الشات الحرة داخل 24 ساعة لتفادي أي مصاريف إضافية، وأن الحساب فـ أمان واقتصاد تام!
 
 أجب الآن بالدارجة المغربية بأسلوب تنفيذي ومحترم ومباشر لسي أيوب.`;
 

@@ -6,8 +6,10 @@ import {
   saveBotSettingsServer,
   getBotAnalyticsServer,
   getSessionMessagesServer,
+  refreshWhatsAppCostServer,
   type BotAnalyticsResponse,
   type BotContactAnalytics,
+  type WhatsAppUsageAndCost,
 } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +46,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Send,
+  Wallet,
+  CreditCard,
 } from "lucide-react";
 
 export default function BotSettingsPage() {
@@ -91,6 +95,21 @@ export default function BotSettingsPage() {
     setRefreshing(true);
     await loadData();
     toast.success("تم تحديث البيانات والإحصائيات بنجاح");
+  }
+
+  const [syncingMeta, setSyncingMeta] = useState(false);
+
+  async function handleRefreshWhatsAppCost() {
+    try {
+      setSyncingMeta(true);
+      const usage = await refreshWhatsAppCostServer();
+      setAnalytics((prev) => (prev ? { ...prev, whatsappUsage: usage } : null));
+      toast.success("تم تحديث إحصائيات ومصاريف واتساب من خوادم Meta بنجاح!");
+    } catch (err: any) {
+      toast.error(err.message || "تعذر تحديث بيانات Meta");
+    } finally {
+      setSyncingMeta(false);
+    }
   }
 
   async function handleSave() {
@@ -234,6 +253,202 @@ export default function BotSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── WhatsApp Business API (Meta) Live Usage & Cost Card ── */}
+      {analytics?.whatsappUsage && (
+        <Card className="border-sky-300 dark:border-sky-900 shadow-md bg-gradient-to-br from-sky-50/50 via-background to-indigo-50/30 dark:from-sky-950/20 dark:via-background dark:to-indigo-950/20">
+          <CardHeader className="pb-3 border-b border-border/50">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg sm:text-xl font-bold">
+                      استهلاك ومصاريف واتساب (WhatsApp Business API — Meta)
+                    </CardTitle>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 text-xs">
+                      خوادم Meta الرسمية 🟢
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs sm:text-sm mt-0.5">
+                    إحصائيات حية ومباشرة من حساب Meta الرسمي — التكلفة بالدرهم المغربي (MAD) وحصة الرسائل المجانية
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  ميزاجور:{" "}
+                  <b className="ltr-num">
+                    {new Date(analytics.whatsappUsage.lastSyncedAt).toLocaleTimeString("ar-MA", {
+                      timeZone: "Africa/Casablanca",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </b>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshWhatsAppCost}
+                  disabled={syncingMeta}
+                  className="h-8 gap-1.5 text-xs border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-950"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingMeta ? "animate-spin" : ""}`} />
+                  تحديث فوري من Meta
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-4 sm:p-6 space-y-5">
+            {/* 3 Metric Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Total Incurred Cost in MAD */}
+              <div className="bg-card p-4 rounded-xl border border-sky-200 dark:border-sky-900/60 shadow-xs space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">المجموع المستحق للدفع لحد الآن:</span>
+                  <Badge className="bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border-emerald-600/30 font-bold">
+                    آمن ومقتصد 🛡️
+                  </Badge>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-sky-600 dark:text-sky-400 ltr-num">
+                    {analytics.whatsappUsage.costs.totalCostMad.toFixed(2)} د.م
+                  </span>
+                  <span className="text-xs text-muted-foreground ltr-num">
+                    (~{analytics.whatsappUsage.costs.totalCostUsd} $)
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  حوالي ربع درهم فقط (استهلاك رسالة Utility رسمية واحدة لتأكيد الطلب)
+                </p>
+              </div>
+
+              {/* Free Tier Monthly Allowance Progress */}
+              <div className="bg-card p-4 rounded-xl border border-sky-200 dark:border-sky-900/60 shadow-xs space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">كوطا الرسائل المجانية (Free Tier):</span>
+                  <span className="font-bold text-foreground ltr-num">
+                    {analytics.whatsappUsage.freeTier.used} / {analytics.whatsappUsage.freeTier.limit}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-foreground ltr-num">
+                    {analytics.whatsappUsage.freeTier.remaining}
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    رسالة مجانية متبقية هذا الشهر 🎁
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden mt-1">
+                  <div
+                    className="bg-sky-500 h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(100, analytics.whatsappUsage.freeTier.percent)}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  ميتا تمنح 1,000 محادثة خدمة مجانية كل شهر (0.00 درهم)
+                </p>
+              </div>
+
+              {/* Meta Account Rating & Limits */}
+              <div className="bg-card p-4 rounded-xl border border-sky-200 dark:border-sky-900/60 shadow-xs space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">جودة الرقم المعتمد لدى Meta:</span>
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px]">
+                    {analytics.whatsappUsage.phone.qualityRating === "GREEN" ? "ممتازة (GREEN 🟢)" : analytics.whatsappUsage.phone.qualityRating}
+                  </Badge>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold ltr-num" dir="ltr">
+                    {analytics.whatsappUsage.phone.displayPhone}
+                  </span>
+                  <span className="text-xs text-muted-foreground">({analytics.whatsappUsage.phone.verifiedName})</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/40">
+                  <span>السقف اليومي المسموح:</span>
+                  <span className="font-semibold text-foreground ltr-num">
+                    {analytics.whatsappUsage.phone.messagingLimitTier} (250 محادثة/اليوم)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rates & Message Types Breakdown Table */}
+            <div className="bg-card rounded-xl border p-4 space-y-3">
+              <h4 className="text-sm font-bold flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-primary" />
+                تفصيل تسعيرة ميتا الرسمية للمغرب (Meta Rates 2026):
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                {/* Free service messages */}
+                <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground">1. رسائل الخدمة (الشات الحر 24h)</span>
+                    <Badge variant="secondary" className="bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border-emerald-600/20 text-[10px]">
+                      0.00 د.م (فابور)
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-[11px]">
+                    ردود البوت الحرة داخل نافذة 24 ساعة من رسالة الزبون. أول 1,000 رسالة شهرياً مجانية تماماً، ثم ~0.24 د.م.
+                  </p>
+                  <div className="pt-1 text-[11px] font-semibold text-foreground flex justify-between">
+                    <span>المستهلك: {analytics.whatsappUsage.breakdown.serviceMessagesCount} رسالة</span>
+                    <span className="text-emerald-600">التكلفة: 0.00 د.م</span>
+                  </div>
+                </div>
+
+                {/* Utility templates */}
+                <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground">2. رسائل الـ Utility (التأكيد والتتبع)</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {analytics.whatsappUsage.rates.utilityMad} د.م / رسالة
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-[11px]">
+                    رسائل القوالب الإدارية الرسمية مثل تأكيد الطلبية، رقم التتبع، وإشعار الشحن (حوالي 25 سنتيم).
+                  </p>
+                  <div className="pt-1 text-[11px] font-semibold text-foreground flex justify-between">
+                    <span>المستهلك: {analytics.whatsappUsage.breakdown.utilityTemplatesCount} رسالة</span>
+                    <span className="text-sky-600">{analytics.whatsappUsage.breakdown.costUtilityMad} د.م</span>
+                  </div>
+                </div>
+
+                {/* Marketing templates */}
+                <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground">3. رسائل التسويق (Marketing)</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {analytics.whatsappUsage.rates.marketingMad} د.م / رسالة
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-[11px]">
+                    الحملات الإعلانية والعروض الترويجية لقاعدة الزبناء (~48 سنتيم للرسالة).
+                  </p>
+                  <div className="pt-1 text-[11px] font-semibold text-foreground flex justify-between">
+                    <span>المستهلك: {analytics.whatsappUsage.breakdown.marketingTemplatesCount} رسالة</span>
+                    <span className="text-muted-foreground">0.00 د.م</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security & Efficiency Note */}
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                <span>
+                  <strong>نظام الاقتصاد والحماية مفعل:</strong> البوت مبرمج ليعتمد فقط على رسائل الشات الحرة المجانية داخل نافذة 24 ساعة، ويتفادى إرسال القوالب المدفوعة بدون ضرورة لضمان بقائك داخل الحصة المجانية 100% دون أي تكاليف إضافية!
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 4 Main KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

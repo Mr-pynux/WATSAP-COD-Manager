@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { getWhatsAppUsageAndCosts, type WhatsAppUsageAndCost } from "@/lib/whatsapp-cost";
 
 // Verify admin access
 async function verifyAdmin() {
@@ -110,6 +111,7 @@ export interface BotAnalyticsResponse {
     todayAudio: number;
     freeTierStatus: string;
   };
+  whatsappUsage?: WhatsAppUsageAndCost | null;
   contacts: BotContactAnalytics[];
 }
 
@@ -117,7 +119,7 @@ export async function getBotAnalyticsServer(): Promise<BotAnalyticsResponse> {
   await verifyAdmin();
   const supabase = getServiceSupabase() || (await createClient());
 
-  const [sessionsRes, messagesRes, ordersRes, blacklistRes] = await Promise.all([
+  const [sessionsRes, messagesRes, ordersRes, blacklistRes, whatsappUsage] = await Promise.all([
     supabase
       .from("chat_sessions")
       .select("id, phone, status, created_at, updated_at")
@@ -130,6 +132,7 @@ export async function getBotAnalyticsServer(): Promise<BotAnalyticsResponse> {
       .from("orders")
       .select("id, order_number, customer_name, phone, status, city, unit_price_mad, quantity"),
     supabase.from("blacklist").select("phone"),
+    getWhatsAppUsageAndCosts().catch(() => null),
   ]);
 
   if (sessionsRes.error) throw new Error(sessionsRes.error.message);
@@ -275,8 +278,14 @@ export async function getBotAnalyticsServer(): Promise<BotAnalyticsResponse> {
       todayAudio: todayAudioCount,
       freeTierStatus: "100% مجاني (Google Gemini Free Tier - 0.00 DH)",
     },
+    whatsappUsage,
     contacts,
   };
+}
+
+export async function refreshWhatsAppCostServer(): Promise<WhatsAppUsageAndCost> {
+  await verifyAdmin();
+  return await getWhatsAppUsageAndCosts(true);
 }
 
 export async function getSessionMessagesServer(sessionId: string) {
